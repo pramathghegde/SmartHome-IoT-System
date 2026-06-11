@@ -2,8 +2,7 @@
 
 #include "device_manager.h"
 #include "relay_manager.h"
-
-#include "device_ids.h"
+#include "motion_manager.h"
 
 void setup()
 {
@@ -12,9 +11,19 @@ void setup()
     initDevices();
 
     initRelays();
+
+    initMotionSensor();
 }
 
 void loop()
 {
+    updateMotionSensor();
+
     updateRelays();
+
+    Serial.print("Motion: ");
+
+    Serial.println(isMotionDetected());
+
+    delay(500);
 }
