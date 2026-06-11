@@ -1,7 +1,5 @@
 #pragma once
 
-#include <stdint.h>
-
 // MASTER
 static const uint8_t MASTER_MAC[6] =
 {
