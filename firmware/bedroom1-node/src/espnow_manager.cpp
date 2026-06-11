@@ -7,16 +7,7 @@
 #include "commands.h"
 #include "config.h"
 #include "node_ids.h"
-
-static uint8_t masterMac[] =
-{
-    0xA0,
-    0xF2,
-    0x62,
-    0xA4,
-    0xBC,
-    0xDC
-};
+#include "mac_addresses.h"
 
 Packet txPacket;
 
@@ -52,7 +43,7 @@ void initEspNow()
 
     memcpy(
         peerInfo.peer_addr,
-        masterMac,
+        MASTER_MAC,
         6
     );
 
@@ -86,7 +77,7 @@ void sendHeartbeat()
     txPacket.uptime = millis();
 
     esp_now_send(
-        masterMac,
+        MASTER_MAC,
         (uint8_t*)&txPacket,
         sizeof(txPacket)
     );
@@ -103,7 +94,7 @@ void sendMotionStatus()
     txPacket.command = CMD_MOTION;
 
     esp_now_send(
-        masterMac,
+        MASTER_MAC,
         (uint8_t*)&txPacket,
         sizeof(txPacket)
     );
