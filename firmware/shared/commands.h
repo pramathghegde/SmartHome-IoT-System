@@ -1,3 +1,5 @@
+#pragma once
+
 enum CommandType
 {
     CMD_ON = 1,
@@ -12,5 +14,7 @@ enum CommandType
 
     CMD_MOTION,
 
-    CMD_LIGHT_LEVEL
+    CMD_ENVIRONMENT,
+
+    CMD_FAN_SPEED
 };

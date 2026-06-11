@@ -1,3 +1,5 @@
+#pragma once
+
 #include <stdint.h>
 
 struct Packet
@@ -14,9 +16,11 @@ struct Packet
 
     uint8_t mode;
 
+    uint8_t fanSpeed;
+
     bool motionDetected;
 
-    bool isDark;
+    int brightness;
 
     uint32_t uptime;
 };

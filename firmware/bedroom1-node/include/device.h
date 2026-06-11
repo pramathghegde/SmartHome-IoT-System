@@ -9,4 +9,6 @@ struct Device
     bool state;
 
     uint8_t mode;
+
+    uint8_t speed;
 };

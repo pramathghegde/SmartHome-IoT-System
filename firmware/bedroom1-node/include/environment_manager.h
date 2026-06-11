@@ -1,3 +1,10 @@
 #pragma once
 
-extern bool isDark;
+struct EnvironmentState
+{
+    int brightness;
+
+    bool isDark;
+};
+
+extern EnvironmentState environment;
