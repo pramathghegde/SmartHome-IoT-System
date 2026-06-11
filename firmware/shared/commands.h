@@ -1,14 +1,15 @@
 #pragma once
 
-#define CMD_ON             1
-#define CMD_OFF            2
+enum CommandType
+{
+    CMD_ON = 1,
+    CMD_OFF,
 
-#define CMD_SET_MODE       3
+    CMD_SET_MODE,
 
-#define CMD_STATUS         4
+    CMD_STATUS,
 
-#define CMD_HEARTBEAT      5
+    CMD_HEARTBEAT,
 
-#define CMD_MOTION         6
-
-#define CMD_SCHEDULE       7
+    CMD_MOTION
+};
