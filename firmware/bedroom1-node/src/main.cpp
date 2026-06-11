@@ -4,6 +4,9 @@
 #include "relay_manager.h"
 #include "motion_manager.h"
 
+#include "espnow_manager.h"
+#include "ota_manager.h"
+
 void setup()
 {
     Serial.begin(115200);
@@ -13,17 +16,19 @@ void setup()
     initRelays();
 
     initMotionSensor();
+
+    initEspNow();
+
+    initOTA();
 }
 
 void loop()
 {
+    handleOTA();
+
     updateMotionSensor();
 
     updateRelays();
 
-    Serial.print("Motion: ");
-
-    Serial.println(isMotionDetected());
-
-    delay(500);
+    sendHeartbeat();
 }
