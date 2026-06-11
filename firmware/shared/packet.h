@@ -16,5 +16,7 @@ struct Packet
 
     bool motionDetected;
 
+    bool isDark;
+
     uint32_t uptime;
 };
