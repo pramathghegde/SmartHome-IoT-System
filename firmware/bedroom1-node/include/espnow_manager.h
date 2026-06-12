@@ -4,6 +4,6 @@ void initEspNow();
 
 void sendHeartbeat();
 
-void sendMotionStatus();
+void sendMotionStatus(bool motion);
 
 void processIncomingPackets();
