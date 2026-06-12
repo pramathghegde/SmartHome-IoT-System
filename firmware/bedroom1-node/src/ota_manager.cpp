@@ -3,25 +3,27 @@
 
 #include "ota_manager.h"
 
-#include "secrets.h"
-
 #include "config.h"
+
+#include "secrets.h"
 
 void initOTA()
 {
+    WiFi.mode(WIFI_STA);
+
     WiFi.begin(
         WIFI_SSID,
         WIFI_PASSWORD
     );
 
-    while(
-        WiFi.status() != WL_CONNECTED
-    )
+    while(WiFi.status() != WL_CONNECTED)
     {
         delay(500);
     }
 
-    ArduinoOTA.setHostname(NODE_NAME);
+    ArduinoOTA.setHostname(
+        NODE_NAME
+    );
 
     ArduinoOTA.setPassword(
         OTA_PASSWORD

@@ -6,6 +6,8 @@
 
 #include "espnow_manager.h"
 #include "ota_manager.h"
+#include "environment_manager.h"
+#include "ldr_manager.h"
 
 void setup()
 {
@@ -19,6 +21,8 @@ void setup()
 
     initEspNow();
 
+    initLDR();
+
     initOTA();
 }
 
@@ -28,12 +32,11 @@ void loop()
 
     updateMotionSensor();
 
-    if(hasMotionChanged())
-    {
-        sendMotionStatus(
-            isMotionDetected()
-        );
-    }
+    updateLDR();
+
+    updateEnvironment();
+
+    processIncomingPackets();
 
     updateRelays();
 

@@ -2,11 +2,9 @@
 
 enum CommandType
 {
-    CMD_ON = 1,
+    CMD_SET_DEVICE_STATE = 1,
 
-    CMD_OFF,
-
-    CMD_SET_MODE,
+    CMD_SET_DEVICE_MODE,
 
     CMD_STATUS,
 
