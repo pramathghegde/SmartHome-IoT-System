@@ -85,13 +85,15 @@ void sendHeartbeat()
     Serial.println("Heartbeat Sent");
 }
 
-void sendMotionStatus()
+void sendMotionStatus(bool motion)
 {
     txPacket.senderNode = NODE_ID;
 
     txPacket.receiverNode = MASTER_NODE;
 
     txPacket.command = CMD_MOTION;
+
+    txPacket.motionDetected = motion;
 
     esp_now_send(
         MASTER_MAC,

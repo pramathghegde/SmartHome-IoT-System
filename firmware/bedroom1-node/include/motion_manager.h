@@ -6,4 +6,6 @@ void updateMotionSensor();
 
 bool isMotionDetected();
 
+bool hasMotionChanged();
+
 unsigned long getLastMotionTime();

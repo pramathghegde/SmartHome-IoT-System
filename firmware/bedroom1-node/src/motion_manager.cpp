@@ -6,6 +6,8 @@
 
 bool motionDetected = false;
 
+static bool previousMotionState = false;
+
 unsigned long lastMotionTime = 0;
 
 void initMotionSensor()
@@ -34,4 +36,16 @@ bool isMotionDetected()
 unsigned long getLastMotionTime()
 {
     return lastMotionTime;
+}
+
+bool hasMotionChanged()
+{
+    if(previousMotionState != motionDetected)
+    {
+        previousMotionState = motionDetected;
+
+        return true;
+    }
+
+    return false;
 }

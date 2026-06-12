@@ -28,6 +28,13 @@ void loop()
 
     updateMotionSensor();
 
+    if(hasMotionChanged())
+    {
+        sendMotionStatus(
+            isMotionDetected()
+        );
+    }
+
     updateRelays();
 
     sendHeartbeat();
