@@ -9,9 +9,27 @@
 #include "node_ids.h"
 #include "mac_addresses.h"
 
+#include "device_manager.h"
+#include "motion_manager.h"
+#include "environment_manager.h"
+
 Packet txPacket;
 
 unsigned long lastHeartbeat = 0;
+
+static unsigned long lastMasterPacket = 0;
+
+bool isMasterOnline()
+{
+    return
+    (
+        millis()
+        -
+        lastMasterPacket
+    )
+    <
+    MASTER_TIMEOUT;
+}
 
 void onDataSent(
     const uint8_t *mac_addr,
@@ -26,6 +44,50 @@ void onDataSent(
     );
 }
 
+void onDataRecv(
+    const uint8_t *mac,
+    const uint8_t *incomingData,
+    int len
+)
+{
+    Packet packet;
+
+    memcpy(
+        &packet,
+        incomingData,
+        sizeof(packet)
+    );
+
+    lastMasterPacket = millis();
+
+    switch(packet.command)
+    {
+        case CMD_SET_DEVICE_STATE:
+
+            setDeviceState(
+                packet.deviceID,
+                packet.state
+            );
+
+            break;
+
+        case CMD_SET_MODE:
+
+            setDeviceMode(
+                packet.deviceID,
+                packet.mode
+            );
+
+            break;
+
+        case CMD_FAN_SPEED:
+
+            // Future fan controller
+
+            break;
+    }
+}
+
 void initEspNow()
 {
     WiFi.mode(WIFI_STA);
@@ -37,7 +99,13 @@ void initEspNow()
         return;
     }
 
-    esp_now_register_send_cb(onDataSent);
+    esp_now_register_send_cb(
+        onDataSent
+    );
+
+    esp_now_register_recv_cb(
+        onDataRecv
+    );
 
     esp_now_peer_info_t peerInfo = {};
 
@@ -51,9 +119,13 @@ void initEspNow()
 
     peerInfo.encrypt = false;
 
-    esp_now_add_peer(&peerInfo);
+    esp_now_add_peer(
+        &peerInfo
+    );
 
-    Serial.println("ESP-NOW Ready");
+    Serial.println(
+        "ESP-NOW Ready"
+    );
 }
 
 void sendHeartbeat()
@@ -68,13 +140,23 @@ void sendHeartbeat()
 
     lastHeartbeat = millis();
 
-    txPacket.senderNode = NODE_ID;
+    txPacket.senderNode =
+        NODE_ID;
 
-    txPacket.receiverNode = MASTER_NODE;
+    txPacket.receiverNode =
+        MASTER_NODE;
 
-    txPacket.command = CMD_HEARTBEAT;
+    txPacket.command =
+        CMD_HEARTBEAT;
 
-    txPacket.uptime = millis();
+    txPacket.motionDetected =
+        isMotionDetected();
+
+    txPacket.brightness =
+        environment.brightness;
+
+    txPacket.uptime =
+        millis();
 
     esp_now_send(
         MASTER_MAC,
@@ -82,18 +164,45 @@ void sendHeartbeat()
         sizeof(txPacket)
     );
 
-    Serial.println("Heartbeat Sent");
+    Serial.println(
+        "Heartbeat Sent"
+    );
 }
 
 void sendMotionStatus(bool motion)
 {
-    txPacket.senderNode = NODE_ID;
+    txPacket.senderNode =
+        NODE_ID;
 
-    txPacket.receiverNode = MASTER_NODE;
+    txPacket.receiverNode =
+        MASTER_NODE;
 
-    txPacket.command = CMD_MOTION;
+    txPacket.command =
+        CMD_MOTION;
 
-    txPacket.motionDetected = motion;
+    txPacket.motionDetected =
+        motion;
+
+    esp_now_send(
+        MASTER_MAC,
+        (uint8_t*)&txPacket,
+        sizeof(txPacket)
+    );
+}
+
+void sendEnvironmentStatus()
+{
+    txPacket.senderNode =
+        NODE_ID;
+
+    txPacket.receiverNode =
+        MASTER_NODE;
+
+    txPacket.command =
+        CMD_ENVIRONMENT;
+
+    txPacket.brightness =
+        environment.brightness;
 
     esp_now_send(
         MASTER_MAC,

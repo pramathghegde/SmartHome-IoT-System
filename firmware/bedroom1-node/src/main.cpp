@@ -8,6 +8,7 @@
 #include "ota_manager.h"
 #include "environment_manager.h"
 #include "ldr_manager.h"
+#include "device_ids.h"
 
 void setup()
 {
@@ -37,6 +38,34 @@ void loop()
     updateEnvironment();
 
     processIncomingPackets();
+
+    if(!isMasterOnline())
+    {
+        setDeviceState(
+            FAN_DEVICE,
+            false
+        );
+
+        setDeviceState(
+            TUBELIGHT_DEVICE,
+            false
+        );
+
+        setDeviceState(
+            BULB_DEVICE,
+            false
+        );
+
+        setDeviceState(
+            SOCKET_DEVICE,
+            false
+        );
+
+        setDeviceState(
+            AC_DEVICE,
+            false
+        );
+    }
 
     updateRelays();
 
