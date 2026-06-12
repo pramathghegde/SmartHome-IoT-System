@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdint.h>
+
 void initEspNow();
 
 void sendDeviceCommand(
@@ -7,5 +9,3 @@ void sendDeviceCommand(
     uint8_t deviceID,
     bool state
 );
-
-void processIncomingPackets();

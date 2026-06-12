@@ -31,13 +31,25 @@ void onDataRecv(
 
     switch(rxPacket.command)
     {
-        case CMD_HEARTBEAT:
+    case CMD_HEARTBEAT:
 
-            updateHeartbeat(
-                rxPacket.senderNode
-            );
+        updateHeartbeat(
+            rxPacket.senderNode
+        );
 
-            break;
+        if(
+            rxPacket.senderNode ==
+            BEDROOM1_NODE
+        )
+        {
+            bedroom1.motionDetected =
+                rxPacket.motionDetected;
+
+            bedroom1.brightness =
+                rxPacket.brightness;
+        }
+
+        break;
 
         case CMD_MOTION:
 
@@ -142,8 +154,4 @@ void sendDeviceCommand(
             sizeof(tx)
         );
     }
-}
-
-void processIncomingPackets()
-{
 }

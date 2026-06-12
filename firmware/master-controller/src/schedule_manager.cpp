@@ -1,11 +1,25 @@
 #include "schedule_manager.h"
 
-bool isSleepTime()
+#include "time_manager.h"
+
+bool isNightRestrictionActive()
 {
-    return false;
+    int hour = getHour();
+
+    return (
+        hour >= 0
+        &&
+        hour < 8
+    );
 }
 
 bool isOutdoorLightTime()
 {
-    return false;
+    int hour = getHour();
+
+    return (
+        hour >= 18
+        &&
+        hour < 23
+    );
 }

@@ -1,5 +1,5 @@
 #pragma once
 
-bool isSleepTime();
+bool isNightRestrictionActive();
 
 bool isOutdoorLightTime();

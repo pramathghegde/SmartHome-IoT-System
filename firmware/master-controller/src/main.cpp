@@ -8,6 +8,8 @@
 
 #include "automation_manager.h"
 
+#include "time_manager.h"
+
 void setup()
 {
     Serial.begin(115200);
@@ -15,13 +17,13 @@ void setup()
     initEspNow();
 
     initOTA();
+
+    initTime();
 }
 
 void loop()
 {
     handleOTA();
-
-    processIncomingPackets();
 
     checkNodeStatus();
 

@@ -8,38 +8,62 @@
 
 #include "node_ids.h"
 
+#include "schedule_manager.h"
+
+#include "device_cache.h"
+
 void runAutomation()
 {
+    if(!bedroom1.online)
+    {
+        return;
+    }
+
+    bool desiredLightState = false;
+
+    if(!isNightRestrictionActive())
+    {
+        if(
+            bedroom1.motionDetected
+            &&
+            bedroom1.brightness < 1200
+        )
+        {
+            desiredLightState = true;
+        }
+    }
+
     if(
-        bedroom1.motionDetected
-        &&
-        bedroom1.brightness < 1200
+        getTubeLightState()
+        !=
+        desiredLightState
     )
     {
         sendDeviceCommand(
             BEDROOM1_NODE,
             TUBELIGHT_DEVICE,
-            true
+            desiredLightState
         );
 
-        sendDeviceCommand(
-            BEDROOM1_NODE,
-            BULB_DEVICE,
-            true
+        setTubeLightState(
+            desiredLightState
         );
     }
-    else
+
+    if(
+        getBulbState()
+        !=
+        desiredLightState
+    )
     {
         sendDeviceCommand(
             BEDROOM1_NODE,
-            TUBELIGHT_DEVICE,
-            false
+            BULB_DEVICE,
+            desiredLightState
         );
 
-        sendDeviceCommand(
-            BEDROOM1_NODE,
-            BULB_DEVICE,
-            false
+        setBulbState(
+            desiredLightState
         );
     }
 }

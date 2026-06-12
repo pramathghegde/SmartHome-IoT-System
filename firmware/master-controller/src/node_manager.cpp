@@ -30,5 +30,9 @@ void checkNodeStatus()
     )
     {
         bedroom1.online = false;
+
+        bedroom1.motionDetected = false;
+
+        bedroom1.brightness = 0;
     }
 }

@@ -8,6 +8,16 @@ struct Bedroom1State
 
     int brightness;
 
+    bool fanState;
+
+    bool tubeState;
+
+    bool bulbState;
+
+    bool socketState;
+
+    bool acState;
+
     unsigned long lastHeartbeat;
 };
 
