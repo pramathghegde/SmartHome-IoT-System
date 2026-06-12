@@ -29,7 +29,7 @@ void initOTA()
 
     ArduinoOTA.begin();
 
-    Serial.println("OTA Ready");
+    Serial.println("OTA Test");
 
     Serial.print("IP: ");
 
