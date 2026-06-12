@@ -1,0 +1,11 @@
+#pragma once
+
+#define NODE_ID BEDROOM1_NODE
+
+#define NODE_NAME "BEDROOM1"
+
+#define HEARTBEAT_INTERVAL 30000
+
+#define MOTION_TIMEOUT 300000
+
+#define DARK_THRESHOLD 1200
