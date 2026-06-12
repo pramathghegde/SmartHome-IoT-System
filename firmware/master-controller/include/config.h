@@ -2,6 +2,8 @@
 
 #define NODE_ID MASTER_NODE
 
-#define NODE_NAME "master"
+#define NODE_NAME "MASTER"
 
 #define HEARTBEAT_TIMEOUT 90000
+
+#define MOTION_TIMEOUT 300000

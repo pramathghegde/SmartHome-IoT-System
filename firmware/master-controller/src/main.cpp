@@ -1,7 +1,12 @@
 #include <Arduino.h>
 
 #include "espnow_manager.h"
+
 #include "ota_manager.h"
+
+#include "node_manager.h"
+
+#include "automation_manager.h"
 
 void setup()
 {
@@ -15,4 +20,10 @@ void setup()
 void loop()
 {
     handleOTA();
+
+    processIncomingPackets();
+
+    checkNodeStatus();
+
+    runAutomation();
 }

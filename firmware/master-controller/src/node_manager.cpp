@@ -1,33 +1,34 @@
 #include <Arduino.h>
 
-static unsigned long bedroom1LastSeen = 0;
+#include "node_manager.h"
 
-void updateNodeHeartbeat(
-    uint8_t nodeID
-)
+#include "state_manager.h"
+
+#include "config.h"
+
+#include "node_ids.h"
+
+void updateHeartbeat(uint8_t nodeID)
 {
-    if(nodeID == 2)
+    if(nodeID == BEDROOM1_NODE)
     {
-        bedroom1LastSeen =
+        bedroom1.online = true;
+
+        bedroom1.lastHeartbeat =
             millis();
     }
 }
 
-bool isNodeOnline(
-    uint8_t nodeID
-)
+void checkNodeStatus()
 {
-    if(nodeID == 2)
+    if(
+        millis()
+        -
+        bedroom1.lastHeartbeat
+        >
+        HEARTBEAT_TIMEOUT
+    )
     {
-        return
-        (
-            millis()
-            -
-            bedroom1LastSeen
-        )
-        <
-        90000;
+        bedroom1.online = false;
     }
-
-    return false;
 }
