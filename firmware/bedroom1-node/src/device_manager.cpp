@@ -2,7 +2,9 @@
 
 #include "device_ids.h"
 #include "modes.h"
+#include <Arduino.h>
 
+#include "device_manager.h"
 Device devices[5];
 
 void initDevices()
@@ -38,6 +40,13 @@ void setDeviceState(uint8_t deviceID, bool state)
     if(device != nullptr)
     {
         device->state = state;
+
+        Serial.print("[DEVICE] ID=");
+        Serial.print(deviceID);
+
+        Serial.print(" STATE=");
+
+        Serial.println(state);
     }
 }
 
@@ -61,6 +70,13 @@ void setDeviceMode(uint8_t deviceID, uint8_t mode)
     {
         device->mode = mode;
     }
+
+    Serial.print("[MODE] Device=");
+    Serial.print(deviceID);
+
+    Serial.print(" Mode=");
+
+    Serial.println(mode);
 }
 
 uint8_t getDeviceMode(uint8_t deviceID)

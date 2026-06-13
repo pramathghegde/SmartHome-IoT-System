@@ -10,6 +10,9 @@
 
 void updateHeartbeat(uint8_t nodeID)
 {
+    Serial.println(
+        "[NODE] BEDROOM1 ONLINE"
+    );
     if(nodeID == BEDROOM1_NODE)
     {
         bedroom1.online = true;
@@ -21,6 +24,9 @@ void updateHeartbeat(uint8_t nodeID)
 
 void checkNodeStatus()
 {
+    Serial.println(
+        "[NODE] BEDROOM1 OFFLINE"
+    );
     if(
         millis()
         -

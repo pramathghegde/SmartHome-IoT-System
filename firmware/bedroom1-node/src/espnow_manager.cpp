@@ -50,6 +50,8 @@ void onDataRecv(
     int len
 )
 {
+    Serial.println("[ESP-NOW] Packet Received");
+
     Packet packet;
 
     memcpy(
@@ -68,6 +70,19 @@ void onDataRecv(
                 packet.deviceID,
                 packet.state
             );
+        Serial.print(
+            "[CMD] SET_DEVICE_STATE Device="
+        );
+
+        Serial.print(
+            packet.deviceID
+        );
+
+        Serial.print(" State=");
+
+        Serial.println(
+            packet.state
+        );
 
             break;
 
@@ -75,6 +90,20 @@ void onDataRecv(
 
             setDeviceMode(
                 packet.deviceID,
+                packet.mode
+            );
+
+            Serial.print(
+                "[CMD] SET_MODE Device="
+            );
+
+            Serial.print(
+                packet.deviceID
+            );
+
+            Serial.print(" Mode=");
+
+            Serial.println(
                 packet.mode
             );
 
@@ -164,9 +193,19 @@ void sendHeartbeat()
         sizeof(txPacket)
     );
 
-    Serial.println(
-        "Heartbeat Sent"
-    );
+    Serial.print("[HEARTBEAT] ");
+
+    Serial.print("Motion=");
+
+    Serial.print(txPacket.motionDetected);
+
+    Serial.print(" Brightness=");
+
+    Serial.print(txPacket.brightness);
+
+    Serial.print(" Uptime=");
+
+    Serial.println(txPacket.uptime);
 }
 
 void sendMotionStatus(bool motion)

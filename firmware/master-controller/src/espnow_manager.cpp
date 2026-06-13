@@ -23,6 +23,9 @@ void onDataRecv(
     int len
 )
 {
+    Serial.println(
+        "\n[ESP-NOW] Packet Received"
+    );
     memcpy(
         &rxPacket,
         incomingData,
@@ -32,9 +35,38 @@ void onDataRecv(
     switch(rxPacket.command)
     {
     case CMD_HEARTBEAT:
+        Serial.print(
+            "[HEARTBEAT] From Node "
+        );
 
+        Serial.println(
+            rxPacket.senderNode
+        );
         updateHeartbeat(
             rxPacket.senderNode
+        );
+        Serial.print(
+            "Motion="
+        );
+
+        Serial.print(
+            rxPacket.motionDetected
+        );
+
+        Serial.print(
+            " Brightness="
+        );
+
+        Serial.print(
+            rxPacket.brightness
+        );
+
+        Serial.print(
+            " Uptime="
+        );
+
+        Serial.println(
+            rxPacket.uptime
         );
 
         if(
@@ -53,6 +85,14 @@ void onDataRecv(
 
         case CMD_MOTION:
 
+            Serial.print(
+                "[MOTION] Bedroom1="
+            );
+
+            Serial.println(
+                rxPacket.motionDetected
+            );
+            
             if(
                 rxPacket.senderNode ==
                 BEDROOM1_NODE
@@ -65,6 +105,13 @@ void onDataRecv(
             break;
 
         case CMD_ENVIRONMENT:
+            Serial.print(
+                "[ENV] Brightness="
+            );
+
+            Serial.println(
+                rxPacket.brightness
+            );
 
             if(
                 rxPacket.senderNode ==
@@ -148,6 +195,29 @@ void sendDeviceCommand(
         BEDROOM1_NODE
     )
     {
+        Serial.print(
+            "[SEND] Node="
+        );
+
+        Serial.print(
+            targetNode
+        );
+
+        Serial.print(
+            " Device="
+        );
+
+        Serial.print(
+            deviceID
+        );
+
+        Serial.print(
+            " State="
+        );
+
+        Serial.println(
+            state
+        );
         esp_now_send(
             BEDROOM1_MAC,
             (uint8_t*)&tx,

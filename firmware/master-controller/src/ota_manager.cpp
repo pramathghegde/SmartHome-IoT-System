@@ -14,6 +14,9 @@ void initOTA()
         WIFI_PASSWORD
     );
 
+    Serial.print("Hostname: ");
+    Serial.println(NODE_NAME);
+
     while(
         WiFi.status() != WL_CONNECTED
     )

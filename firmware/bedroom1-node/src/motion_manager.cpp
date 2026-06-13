@@ -44,6 +44,14 @@ bool hasMotionChanged()
     {
         previousMotionState = motionDetected;
 
+        Serial.print("[MOTION] ");
+
+        Serial.println(
+            motionDetected ?
+            "DETECTED" :
+            "CLEARED"
+        );
+
         return true;
     }
 

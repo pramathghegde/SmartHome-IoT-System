@@ -16,6 +16,9 @@ void initOTA()
         WIFI_PASSWORD
     );
 
+    Serial.print("Hostname: ");
+    Serial.println(NODE_NAME);
+
     while(WiFi.status() != WL_CONNECTED)
     {
         delay(500);
@@ -31,7 +34,7 @@ void initOTA()
 
     ArduinoOTA.begin();
 
-    Serial.println("OTA Test");
+    Serial.println("OTA Ready");
 
     Serial.print("IP: ");
 
