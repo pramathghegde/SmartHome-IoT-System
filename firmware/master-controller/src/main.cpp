@@ -78,7 +78,7 @@ void loop()
 
         if(
             millis() - lastTimePrint >
-            10000
+            5000
         )
         {
             lastTimePrint = millis();

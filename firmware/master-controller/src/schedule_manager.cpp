@@ -1,25 +1,40 @@
 #include "schedule_manager.h"
 
-#include "time_manager.h"
-
-bool isNightRestrictionActive()
+bool isWithinSchedule(
+    int currentHour,
+    int currentMinute,
+    int startHour,
+    int startMinute,
+    int stopHour,
+    int stopMinute
+)
 {
-    int hour = getHour();
+    int current =
+        currentHour * 60 +
+        currentMinute;
 
-    return (
-        hour >= 0
-        &&
-        hour < 8
-    );
-}
+    int start =
+        startHour * 60 +
+        startMinute;
 
-bool isOutdoorLightTime()
-{
-    int hour = getHour();
+    int stop =
+        stopHour * 60 +
+        stopMinute;
 
-    return (
-        hour >= 18
-        &&
-        hour < 23
+    if(start <= stop)
+    {
+        return
+        (
+            current >= start
+            &&
+            current < stop
+        );
+    }
+
+    return
+    (
+        current >= start
+        ||
+        current < stop
     );
 }

@@ -1,5 +1,10 @@
 #pragma once
 
-bool isNightRestrictionActive();
-
-bool isOutdoorLightTime();
+bool isWithinSchedule(
+    int currentHour,
+    int currentMinute,
+    int startHour,
+    int startMinute,
+    int stopHour,
+    int stopMinute
+);
