@@ -31,6 +31,8 @@ void loop()
 
     runAutomation();
 
+    updateTime();
+
     static unsigned long lastStatus = 0;
 
     if(
@@ -71,5 +73,23 @@ void loop()
         Serial.println(
             "==================================="
         );
+
+        static unsigned long lastTimePrint = 0;
+
+        if(
+            millis() - lastTimePrint >
+            10000
+        )
+        {
+            lastTimePrint = millis();
+
+            Serial.print("[TIME] ");
+
+            Serial.print(getHour());
+
+            Serial.print(":");
+
+            Serial.println(getMinute());
+        }
     }
 }

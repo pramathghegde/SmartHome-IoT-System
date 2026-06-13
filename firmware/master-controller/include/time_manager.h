@@ -2,8 +2,10 @@
 
 void initTime();
 
-bool isTimeSynced();
+void updateTime();
 
 int getHour();
 
 int getMinute();
+
+bool isTimeValid();

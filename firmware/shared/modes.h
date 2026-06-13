@@ -2,6 +2,11 @@
 
 enum DeviceMode
 {
-    MODE_MANUAL = 0,
-    MODE_AUTO = 1
+    MODE_OFF = 0,
+
+    MODE_ON = 1,
+
+    MODE_AUTO = 2,
+
+    MODE_SCHEDULED = 3
 };

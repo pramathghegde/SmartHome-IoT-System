@@ -3,7 +3,7 @@
 
 #include "time_manager.h"
 
-static bool synced = false;
+static bool timeValid = false;
 
 void initTime()
 {
@@ -18,13 +18,40 @@ void initTime()
 
     if(getLocalTime(&timeinfo))
     {
-        synced = true;
+        timeValid = true;
+
+        Serial.println(
+            "[TIME] NTP Synced"
+        );
+    }
+    else
+    {
+        Serial.println(
+            "[TIME] NTP Failed"
+        );
     }
 }
 
-bool isTimeSynced()
+void updateTime()
 {
-    return synced;
+    static unsigned long lastCheck = 0;
+
+    if(
+        millis() - lastCheck <
+        60000
+    )
+    {
+        return;
+    }
+
+    lastCheck = millis();
+
+    struct tm timeinfo;
+
+    if(getLocalTime(&timeinfo))
+    {
+        timeValid = true;
+    }
 }
 
 int getHour()
@@ -49,4 +76,9 @@ int getMinute()
     }
 
     return 0;
+}
+
+bool isTimeValid()
+{
+    return timeValid;
 }
