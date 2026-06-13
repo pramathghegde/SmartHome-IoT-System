@@ -12,7 +12,7 @@ void initLDR()
 
 void updateLDR()
 {
-    brightness = 1000;
+    brightness = analogRead(LDR_PIN);
 }
 
 int getBrightness()

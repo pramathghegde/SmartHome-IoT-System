@@ -66,17 +66,20 @@ void setDeviceMode(uint8_t deviceID, uint8_t mode)
 {
     Device* device = getDevice(deviceID);
 
-    if(device != nullptr)
-    {
-        device->mode = mode;
+if(device != nullptr)
+{
+        if(device->mode != mode)
+        {
+            device->mode = mode;
+
+        Serial.print("[DEVICE] ID=");
+        Serial.print(deviceID);
+
+        Serial.print(" MODE=");
+
+        Serial.println(mode);
+        }
     }
-
-    Serial.print("[MODE] Device=");
-    Serial.print(deviceID);
-
-    Serial.print(" Mode=");
-
-    Serial.println(mode);
 }
 
 uint8_t getDeviceMode(uint8_t deviceID)

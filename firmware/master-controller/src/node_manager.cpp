@@ -8,25 +8,30 @@
 
 #include "node_ids.h"
 
+static bool offlinePrinted = false;
+
 void updateHeartbeat(uint8_t nodeID)
 {
-    Serial.println(
-        "[NODE] BEDROOM1 ONLINE"
-    );
     if(nodeID == BEDROOM1_NODE)
     {
+        if(!bedroom1.online)
+        {
+            Serial.println(
+                "[NODE] BEDROOM1 ONLINE"
+            );
+        }
+
         bedroom1.online = true;
 
         bedroom1.lastHeartbeat =
             millis();
+
+        offlinePrinted = false;
     }
 }
 
 void checkNodeStatus()
 {
-    Serial.println(
-        "[NODE] BEDROOM1 OFFLINE"
-    );
     if(
         millis()
         -
@@ -37,8 +42,13 @@ void checkNodeStatus()
     {
         bedroom1.online = false;
 
-        bedroom1.motionDetected = false;
+        if(!offlinePrinted)
+        {
+            Serial.println(
+                "[NODE] BEDROOM1 OFFLINE"
+            );
 
-        bedroom1.brightness = 0;
+            offlinePrinted = true;
+        }
     }
 }

@@ -39,32 +39,47 @@ void loop()
 
     processIncomingPackets();
 
+    static bool masterOfflineHandled = false;
+
     if(!isMasterOnline())
     {
-        setDeviceState(
-            FAN_DEVICE,
-            false
-        );
+        if(!masterOfflineHandled)
+        {
+            Serial.println(
+                "[SAFETY] MASTER OFFLINE"
+            );
 
-        setDeviceState(
-            TUBELIGHT_DEVICE,
-            false
-        );
+            setDeviceState(
+                FAN_DEVICE,
+                false
+            );
 
-        setDeviceState(
-            BULB_DEVICE,
-            false
-        );
+            setDeviceState(
+                TUBELIGHT_DEVICE,
+                false
+            );
 
-        setDeviceState(
-            SOCKET_DEVICE,
-            false
-        );
+            setDeviceState(
+                BULB_DEVICE,
+                false
+            );
 
-        setDeviceState(
-            AC_DEVICE,
-            false
-        );
+            setDeviceState(
+                SOCKET_DEVICE,
+                false
+            );
+
+            setDeviceState(
+                AC_DEVICE,
+                false
+            );
+
+            masterOfflineHandled = true;
+        }
+    }
+    else
+    {
+        masterOfflineHandled = false;
     }
 
     updateRelays();
