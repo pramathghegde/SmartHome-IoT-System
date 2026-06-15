@@ -9,7 +9,7 @@
 // ---- TESTING VALUES (restore before production) ----
 // Production: HEARTBEAT_INTERVAL 30000
 // Production: MOTION_TIMEOUT     300000
-#define HEARTBEAT_INTERVAL 3000
+#define HEARTBEAT_INTERVAL 5000
 
 #define MOTION_TIMEOUT     6000
 // ----------------------------------------------------
