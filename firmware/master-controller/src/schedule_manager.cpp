@@ -1,40 +1,35 @@
 #include "schedule_manager.h"
 
-bool isWithinSchedule(
-    int currentHour,
-    int currentMinute,
-    int startHour,
-    int startMinute,
-    int stopHour,
-    int stopMinute
+#include "time_manager.h"
+
+bool isScheduleActive(
+    DeviceConfig &device
 )
 {
     int current =
-        currentHour * 60 +
-        currentMinute;
+        getHour() * 60 +
+        getMinute();
 
     int start =
-        startHour * 60 +
-        startMinute;
+        device.startHour * 60 +
+        device.startMinute;
 
     int stop =
-        stopHour * 60 +
-        stopMinute;
+        device.stopHour * 60 +
+        device.stopMinute;
 
-    if(start <= stop)
+    if(start < stop)
     {
         return
         (
-            current >= start
-            &&
+            current >= start &&
             current < stop
         );
     }
 
     return
     (
-        current >= start
-        ||
+        current >= start ||
         current < stop
     );
 }

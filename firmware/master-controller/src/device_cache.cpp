@@ -1,25 +1,52 @@
 #include "device_cache.h"
 
-static bool tubeState = false;
+#include "modes.h"
 
-static bool bulbState = false;
+DeviceConfig bedroom1Fan;
+DeviceConfig bedroom1Tube;
+DeviceConfig bedroom1Bulb;
+DeviceConfig bedroom1Socket;
+DeviceConfig bedroom1AC;
 
-bool getTubeLightState()
+void initDeviceCache()
 {
-    return tubeState;
-}
+    bedroom1Fan =
+    {
+        MODE_AUTO,
+        false,
+        23,0,
+        5,0
+    };
 
-bool getBulbState()
-{
-    return bulbState;
-}
+    bedroom1Tube =
+    {
+        MODE_AUTO,
+        false,
+        18,0,
+        23,0
+    };
 
-void setTubeLightState(bool state)
-{
-    tubeState = state;
-}
+    bedroom1Bulb =
+    {
+        MODE_AUTO,
+        false,
+        18,0,
+        23,0
+    };
 
-void setBulbState(bool state)
-{
-    bulbState = state;
+    bedroom1Socket =
+    {
+        MODE_OFF,
+        false,
+        0,0,
+        0,0
+    };
+
+    bedroom1AC =
+    {
+        MODE_OFF,
+        false,
+        0,0,
+        0,0
+    };
 }
