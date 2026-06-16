@@ -16,7 +16,7 @@
 
 // Time (ms) before master is considered offline
 // Must be > HEARTBEAT_INTERVAL * 3 at minimum
-#define MASTER_TIMEOUT     9000
+#define MASTER_TIMEOUT     20000
 
 // LDR threshold: below this = dark, trigger automation
 // ESP32-C3 ADC is 12-bit (0-4095), lower value = brighter

@@ -16,6 +16,8 @@
 
 #include <Arduino.h>
 
+#include "dashboard_manager.h"
+
 void processDevice(
     DeviceConfig &device,
     uint8_t deviceID
@@ -71,6 +73,11 @@ void processDevice(
             BEDROOM1_NODE,
             deviceID,
             desiredState
+        );
+
+        notifyDeviceStateChange(
+        deviceID,
+        desiredState
         );
 
         Serial.print(

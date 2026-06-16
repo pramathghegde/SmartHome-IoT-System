@@ -1,20 +1,17 @@
 // ==============================================================
 // dashboard_manager.cpp
-// LOW MESSAGE MODE - stays within Blynk free tier
 //
-// Messages OUT (Master → Blynk):
-//   V200 : Single status summary string, sent every 60 seconds
-//           = ~1 msg/min = ~43,200/month
-//
-// Messages IN (Blynk → Master):
-//   V0-V4    : Mode controls (only on user press, ~10/day)
-//   V100-V104: Schedules (only on user set)
-//
-// Total estimated: ~1-2 msg/min, ~50,000-60,000/month MAX
+// TERMINAL ARCHITECTURE:
+//   V200      : Terminal widget - full status dump every 60s
+//               = 1 message/minute = 43,200/month
+//   V150-V154 : LED per appliance - only on state change
+//   V0-V4     : Mode controls - incoming only
+//   V100-V104 : Schedules - incoming only
 // ==============================================================
 
 #include "secrets.h"
 #include <BlynkSimpleEsp32.h>
+#include <WidgetTerminal.h>
 #include <WiFi.h>
 #include <time.h>
 
@@ -23,13 +20,229 @@
 #include "state_manager.h"
 #include "time_manager.h"
 #include "modes.h"
+#include "config.h"
+#include "device_ids.h"
 
 #include <Arduino.h>
 
 char auth[] = BLYNK_AUTH_TOKEN;
 
+WidgetTerminal terminal(200);
+
 // ---------------------------------------------------------------
-// V0-V4 : Mode Controls (incoming only, zero outgoing messages)
+// Helpers
+// ---------------------------------------------------------------
+
+static const char* modeStr(uint8_t mode)
+{
+    switch(mode)
+    {
+        case 0:  return "OFF  ";
+        case 1:  return "ON   ";
+        case 2:  return "AUTO ";
+        case 3:  return "SCHED";
+        default: return "?    ";
+    }
+}
+
+static const char* stateStr(bool state)
+{
+    return state ? " ON" : "OFF";
+}
+
+// ---------------------------------------------------------------
+// LED state tracking
+// ---------------------------------------------------------------
+
+static bool prevFanState    = false;
+static bool prevTubeState   = false;
+static bool prevBulbState   = false;
+static bool prevSocketState = false;
+static bool prevACState     = false;
+
+// ---------------------------------------------------------------
+// notifyDeviceStateChange()
+// Called from automation_manager on every relay change
+// Sends LED update for that device only = 1 message per change
+// ---------------------------------------------------------------
+
+void notifyDeviceStateChange(
+    uint8_t deviceID,
+    bool newState
+)
+{
+    int pin = -1;
+
+    switch(deviceID)
+    {
+        case FAN_DEVICE:
+            if (newState == prevFanState) return;
+            prevFanState = newState;
+            pin = 150;
+            break;
+
+        case TUBELIGHT_DEVICE:
+            if (newState == prevTubeState) return;
+            prevTubeState = newState;
+            pin = 151;
+            break;
+
+        case BULB_DEVICE:
+            if (newState == prevBulbState) return;
+            prevBulbState = newState;
+            pin = 152;
+            break;
+
+        case SOCKET_DEVICE:
+            if (newState == prevSocketState) return;
+            prevSocketState = newState;
+            pin = 153;
+            break;
+
+        case AC_DEVICE:
+            if (newState == prevACState) return;
+            prevACState = newState;
+            pin = 154;
+            break;
+
+        default:
+            return;
+    }
+
+    Blynk.virtualWrite(pin, newState ? 255 : 0);
+
+    Serial.print("[BLYNK] LED V");
+    Serial.print(pin);
+    Serial.print(" -> ");
+    Serial.println(newState ? "ON" : "OFF");
+}
+
+// ---------------------------------------------------------------
+// sendStatusToTerminal()
+// Prints full home status to Blynk Terminal
+// Called every 60 seconds = 1 message/minute
+// ---------------------------------------------------------------
+
+static void sendStatusToTerminal()
+{
+    // Get current time
+    char timeStr[9] = "--:--:--";
+
+    if (isTimeValid())
+    {
+        struct tm timeinfo;
+
+        if (getLocalTime(&timeinfo))
+        {
+            strftime(
+                timeStr,
+                sizeof(timeStr),
+                "%H:%M:%S",
+                &timeinfo
+            );
+        }
+    }
+
+    // Day/Night from LDR
+    const char* lightStatus =
+        (bedroom1.brightness < DARK_THRESHOLD) ?
+        "NIGHT" : "DAY  ";
+
+    // Clear terminal before printing fresh status
+    terminal.clear();
+
+    // ---- HEADER ----
+    terminal.println("==============================");
+    terminal.println("   ADVAITA SMART HOME");
+    terminal.print  ("   ");
+    terminal.println(timeStr);
+    terminal.println("==============================");
+
+    // ---- ENVIRONMENT ----
+    terminal.println();
+    terminal.println("--- ENVIRONMENT ----------");
+    terminal.println("  Temp  : --.- C");        // Future DHT/BME
+    terminal.println("  Humid : --.- %");        // Future DHT/BME
+    terminal.print  ("  Light : ");
+    terminal.println(lightStatus);
+    terminal.print  ("  LDR   : ");
+    terminal.println(bedroom1.brightness);
+    terminal.println("  Door  : ------");        // Future door lock
+
+    // ---- ROOM STATUS ----
+    terminal.println();
+    terminal.println("--- ROOM STATUS ----------");
+
+    terminal.print("  Bedroom1 : ");
+    terminal.println(
+        bedroom1.online ? "ONLINE " : "OFFLINE"
+    );
+
+    terminal.print("  Motion  : ");
+    terminal.println(
+        bedroom1.motionDetected ? "DETECTED" : "CLEAR   "
+    );
+
+    terminal.println("  Bedroom2 : -------");    // Future node
+    terminal.println("  Hall     : -------");    // Future node
+    terminal.println("  Kitchen  : -------");    // Future node
+
+    // ---- APPLIANCES ----
+    terminal.println();
+    terminal.println("--- APPLIANCES -----------");
+
+    terminal.print("  Fan    : ");
+    terminal.print(stateStr(bedroom1Fan.currentState));
+    terminal.print("  [");
+    terminal.print(modeStr(bedroom1Fan.mode));
+    terminal.println("]");
+
+    terminal.print("  Tube   : ");
+    terminal.print(stateStr(bedroom1Tube.currentState));
+    terminal.print("  [");
+    terminal.print(modeStr(bedroom1Tube.mode));
+    terminal.println("]");
+
+    terminal.print("  Bulb   : ");
+    terminal.print(stateStr(bedroom1Bulb.currentState));
+    terminal.print("  [");
+    terminal.print(modeStr(bedroom1Bulb.mode));
+    terminal.println("]");
+
+    terminal.print("  Socket : ");
+    terminal.print(stateStr(bedroom1Socket.currentState));
+    terminal.print("  [");
+    terminal.print(modeStr(bedroom1Socket.mode));
+    terminal.println("]");
+
+    terminal.print("  AC     : ");
+    terminal.print(stateStr(bedroom1AC.currentState));
+    terminal.print("  [");
+    terminal.print(modeStr(bedroom1AC.mode));
+    terminal.println("]");
+
+    // ---- SYSTEM ----
+    terminal.println();
+    terminal.println("--- SYSTEM ---------------");
+
+    terminal.print("  WiFi  : ");
+    terminal.print(WiFi.RSSI());
+    terminal.println(" dBm");
+
+    terminal.print("  Uptime: ");
+    terminal.print(millis() / 60000);
+    terminal.println(" min");
+
+    terminal.println("==============================");
+
+    // Flush sends everything as one message
+    terminal.flush();
+
+    Serial.println("[BLYNK] Terminal status sent");
+}
+
+// ---------------------------------------------------------------
+// V0-V4 : Mode Controls (Blynk → Master)
 // ---------------------------------------------------------------
 
 BLYNK_WRITE(V0)
@@ -68,7 +281,7 @@ BLYNK_WRITE(V4)
 }
 
 // ---------------------------------------------------------------
-// V100-V104 : Schedule Inputs (incoming only)
+// V100-V104 : Schedule Inputs (Blynk → Master)
 // ---------------------------------------------------------------
 
 BLYNK_WRITE(V100)
@@ -84,14 +297,7 @@ BLYNK_WRITE(V100)
         bedroom1Fan.stopHour   = t.getStopHour();
         bedroom1Fan.stopMinute = t.getStopMinute();
     }
-    Serial.print("[BLYNK] FAN SCHEDULE -> ");
-    Serial.print(bedroom1Fan.startHour);
-    Serial.print(":");
-    Serial.print(bedroom1Fan.startMinute);
-    Serial.print(" - ");
-    Serial.print(bedroom1Fan.stopHour);
-    Serial.print(":");
-    Serial.println(bedroom1Fan.stopMinute);
+    Serial.println("[BLYNK] FAN SCHEDULE updated");
 }
 
 BLYNK_WRITE(V101)
@@ -107,14 +313,7 @@ BLYNK_WRITE(V101)
         bedroom1Tube.stopHour   = t.getStopHour();
         bedroom1Tube.stopMinute = t.getStopMinute();
     }
-    Serial.print("[BLYNK] TUBE SCHEDULE -> ");
-    Serial.print(bedroom1Tube.startHour);
-    Serial.print(":");
-    Serial.print(bedroom1Tube.startMinute);
-    Serial.print(" - ");
-    Serial.print(bedroom1Tube.stopHour);
-    Serial.print(":");
-    Serial.println(bedroom1Tube.stopMinute);
+    Serial.println("[BLYNK] TUBE SCHEDULE updated");
 }
 
 BLYNK_WRITE(V102)
@@ -130,14 +329,7 @@ BLYNK_WRITE(V102)
         bedroom1Bulb.stopHour   = t.getStopHour();
         bedroom1Bulb.stopMinute = t.getStopMinute();
     }
-    Serial.print("[BLYNK] BULB SCHEDULE -> ");
-    Serial.print(bedroom1Bulb.startHour);
-    Serial.print(":");
-    Serial.print(bedroom1Bulb.startMinute);
-    Serial.print(" - ");
-    Serial.print(bedroom1Bulb.stopHour);
-    Serial.print(":");
-    Serial.println(bedroom1Bulb.stopMinute);
+    Serial.println("[BLYNK] BULB SCHEDULE updated");
 }
 
 BLYNK_WRITE(V103)
@@ -153,14 +345,7 @@ BLYNK_WRITE(V103)
         bedroom1Socket.stopHour   = t.getStopHour();
         bedroom1Socket.stopMinute = t.getStopMinute();
     }
-    Serial.print("[BLYNK] SOCKET SCHEDULE -> ");
-    Serial.print(bedroom1Socket.startHour);
-    Serial.print(":");
-    Serial.print(bedroom1Socket.startMinute);
-    Serial.print(" - ");
-    Serial.print(bedroom1Socket.stopHour);
-    Serial.print(":");
-    Serial.println(bedroom1Socket.stopMinute);
+    Serial.println("[BLYNK] SOCKET SCHEDULE updated");
 }
 
 BLYNK_WRITE(V104)
@@ -176,14 +361,7 @@ BLYNK_WRITE(V104)
         bedroom1AC.stopHour   = t.getStopHour();
         bedroom1AC.stopMinute = t.getStopMinute();
     }
-    Serial.print("[BLYNK] AC SCHEDULE -> ");
-    Serial.print(bedroom1AC.startHour);
-    Serial.print(":");
-    Serial.print(bedroom1AC.startMinute);
-    Serial.print(" - ");
-    Serial.print(bedroom1AC.stopHour);
-    Serial.print(":");
-    Serial.println(bedroom1AC.stopMinute);
+    Serial.println("[BLYNK] AC SCHEDULE updated");
 }
 
 // ---------------------------------------------------------------
@@ -199,48 +377,33 @@ void initDashboard()
     );
 
     Serial.println("[BLYNK] Connected");
+
+    // Reset all LEDs on boot
+    Blynk.virtualWrite(150, 0);
+    Blynk.virtualWrite(151, 0);
+    Blynk.virtualWrite(152, 0);
+    Blynk.virtualWrite(153, 0);
+    Blynk.virtualWrite(154, 0);
+
+    // Send first status immediately
+    sendStatusToTerminal();
 }
 
 // ---------------------------------------------------------------
 // updateDashboard
-// Blynk.run() every loop - FREE (no messages, just keeps connection)
-// Status push every 60 seconds - 1 message per minute
+// Blynk.run() every loop = free
+// Terminal update every 60 seconds = 1 msg/min
 // ---------------------------------------------------------------
 
 void updateDashboard()
 {
     Blynk.run();
 
-    static unsigned long lastUpdate = 0;
+    static unsigned long lastSend = 0;
 
-    if (millis() - lastUpdate < 60000)
+    if (millis() - lastSend >= 60000)
     {
-        return;
+        lastSend = millis();
+        sendStatusToTerminal();
     }
-
-    lastUpdate = millis();
-
-    // Build one compact status string
-    // Example: "B1:ON | MOT:Y | LDR:820 | F:ON T:OFF BL:ON SK:OFF AC:OFF"
-
-    char status[80];
-
-    snprintf(
-        status,
-        sizeof(status),
-        "B1:%s|MOT:%s|LDR:%d|F:%s T:%s B:%s S:%s A:%s",
-        bedroom1.online         ? "ON"  : "OFF",
-        bedroom1.motionDetected ? "Y"   : "N",
-        bedroom1.brightness,
-        bedroom1Fan.currentState    ? "ON" : "OFF",
-        bedroom1Tube.currentState   ? "ON" : "OFF",
-        bedroom1Bulb.currentState   ? "ON" : "OFF",
-        bedroom1Socket.currentState ? "ON" : "OFF",
-        bedroom1AC.currentState     ? "ON" : "OFF"
-    );
-
-    Blynk.virtualWrite(200, status);
-
-    Serial.print("[BLYNK] STATUS -> ");
-    Serial.println(status);
 }
