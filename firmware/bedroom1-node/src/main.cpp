@@ -3,7 +3,6 @@
 #include "device_manager.h"
 #include "relay_manager.h"
 #include "motion_manager.h"
-
 #include "espnow_manager.h"
 #include "ota_manager.h"
 #include "environment_manager.h"
@@ -14,65 +13,50 @@ void setup()
 {
     Serial.begin(115200);
 
+    delay(500);
+
+    Serial.println("[BEDROOM1] Booting...");
+
     initDevices();
 
     initRelays();
 
     initMotionSensor();
 
-    initEspNow();
-
     initLDR();
 
-    initOTA();
+    initOTA();      // connects WiFi + starts ArduinoOTA
+
+    initEspNow();   // registers ESP-NOW callbacks + peer
+
+    Serial.println("[BEDROOM1] Boot complete");
 }
 
 void loop()
 {
     handleOTA();
 
-    updateMotionSensor();
+    updateMotionSensor();   // read raw RCWL GPIO
 
-    updateLDR();
+    updateLDR();            // read raw ADC
 
-    updateEnvironment();
+    updateEnvironment();    // store brightness into environment struct
 
     processIncomingPackets();
 
     static bool masterOfflineHandled = false;
 
-    if(!isMasterOnline())
+    if (!isMasterOnline())
     {
-        if(!masterOfflineHandled)
+        if (!masterOfflineHandled)
         {
-            Serial.println(
-                "[SAFETY] MASTER OFFLINE"
-            );
+            Serial.println("[SAFETY] MASTER OFFLINE - turning off all relays");
 
-            setDeviceState(
-                FAN_DEVICE,
-                false
-            );
-
-            setDeviceState(
-                TUBELIGHT_DEVICE,
-                false
-            );
-
-            setDeviceState(
-                BULB_DEVICE,
-                false
-            );
-
-            setDeviceState(
-                SOCKET_DEVICE,
-                false
-            );
-
-            setDeviceState(
-                AC_DEVICE,
-                false
-            );
+            setDeviceState(FAN_DEVICE,      false);
+            setDeviceState(TUBELIGHT_DEVICE,false);
+            setDeviceState(BULB_DEVICE,     false);
+            setDeviceState(SOCKET_DEVICE,   false);
+            setDeviceState(AC_DEVICE,       false);
 
             masterOfflineHandled = true;
         }
@@ -84,5 +68,5 @@ void loop()
 
     updateRelays();
 
-    sendHeartbeat();
+    sendHeartbeat();    // sends raw motion + raw brightness to master
 }

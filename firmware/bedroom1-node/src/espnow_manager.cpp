@@ -2,46 +2,24 @@
 #include <esp_now.h>
 
 #include "espnow_manager.h"
-
 #include "packet.h"
 #include "commands.h"
 #include "config.h"
 #include "node_ids.h"
 #include "mac_addresses.h"
-
 #include "device_manager.h"
 #include "motion_manager.h"
 #include "environment_manager.h"
 
-Packet txPacket;
+#include <Arduino.h>
 
-unsigned long lastHeartbeat = 0;
-
+static Packet txPacket;
+static unsigned long lastHeartbeat   = 0;
 static unsigned long lastMasterPacket = 0;
 
 bool isMasterOnline()
 {
-    return
-    (
-        millis()
-        -
-        lastMasterPacket
-    )
-    <
-    MASTER_TIMEOUT;
-}
-
-void onDataSent(
-    const uint8_t *mac_addr,
-    esp_now_send_status_t status)
-{
-    Serial.print("ESP-NOW Send Status: ");
-
-    Serial.println(
-        status == ESP_NOW_SEND_SUCCESS ?
-        "Success" :
-        "Failed"
-    );
+    return (millis() - lastMasterPacket) < MASTER_TIMEOUT;
 }
 
 void onDataRecv(
@@ -50,69 +28,41 @@ void onDataRecv(
     int len
 )
 {
-    Serial.println("[ESP-NOW] Packet Received");
-
     Packet packet;
 
-    memcpy(
-        &packet,
-        incomingData,
-        sizeof(packet)
-    );
+    memcpy(&packet, incomingData, sizeof(packet));
 
     lastMasterPacket = millis();
 
     switch(packet.command)
     {
+        case CMD_ACK:
+            // Silent - no serial print needed, too noisy
+            break;
+
         case CMD_SET_DEVICE_STATE:
 
-            setDeviceState(
-                packet.deviceID,
-                packet.state
-            );
-        Serial.print(
-            "[CMD] SET_DEVICE_STATE Device="
-        );
+            setDeviceState(packet.deviceID, packet.state);
 
-        Serial.print(
-            packet.deviceID
-        );
-
-        Serial.print(" State=");
-
-        Serial.println(
-            packet.state
-        );
+            Serial.print("[CMD] Device=");
+            Serial.print(packet.deviceID);
+            Serial.print(" -> ");
+            Serial.println(packet.state ? "ON" : "OFF");
 
             break;
 
         case CMD_SET_MODE:
 
-            setDeviceMode(
-                packet.deviceID,
-                packet.mode
-            );
+            setDeviceMode(packet.deviceID, packet.mode);
 
-            Serial.print(
-                "[CMD] SET_MODE Device="
-            );
-
-            Serial.print(
-                packet.deviceID
-            );
-
-            Serial.print(" Mode=");
-
-            Serial.println(
-                packet.mode
-            );
+            Serial.print("[CMD] Mode Device=");
+            Serial.print(packet.deviceID);
+            Serial.print(" -> ");
+            Serial.println(packet.mode);
 
             break;
 
         case CMD_FAN_SPEED:
-
-            // Future fan controller
-
             break;
     }
 }
@@ -121,106 +71,71 @@ void initEspNow()
 {
     WiFi.mode(WIFI_STA);
 
-    if(esp_now_init() != ESP_OK)
+    if (esp_now_init() != ESP_OK)
     {
-        Serial.println("ESP-NOW Init Failed");
-
+        Serial.println("[ESP-NOW] Init Failed");
         return;
     }
 
-    esp_now_register_send_cb(
-        onDataSent
-    );
-
-    esp_now_register_recv_cb(
-        onDataRecv
-    );
+    esp_now_register_recv_cb(onDataRecv);
 
     esp_now_peer_info_t peerInfo = {};
 
-    memcpy(
-        peerInfo.peer_addr,
-        MASTER_MAC,
-        6
-    );
+    memcpy(peerInfo.peer_addr, MASTER_MAC, 6);
 
     peerInfo.channel = 0;
-
     peerInfo.encrypt = false;
 
-    esp_now_add_peer(
-        &peerInfo
-    );
+    esp_now_add_peer(&peerInfo);
 
-    Serial.println(
-        "ESP-NOW Ready"
-    );
+    Serial.println("[ESP-NOW] Ready");
 }
 
 void sendHeartbeat()
 {
-    if(
-        millis() - lastHeartbeat <
-        HEARTBEAT_INTERVAL
-    )
+    if (millis() - lastHeartbeat < HEARTBEAT_INTERVAL)
     {
         return;
     }
 
     lastHeartbeat = millis();
 
-    txPacket.senderNode =
-        NODE_ID;
+    txPacket = {};
 
-    txPacket.receiverNode =
-        MASTER_NODE;
+    txPacket.senderNode     = NODE_ID;
+    txPacket.receiverNode   = MASTER_NODE;
+    txPacket.command        = CMD_HEARTBEAT;
+    txPacket.motionDetected = isMotionDetected();
+    txPacket.brightness     = environment.brightness;
 
-    txPacket.command =
-        CMD_HEARTBEAT;
+    // Uptime in seconds, overflow safe
+    txPacket.uptime = millis() / 1000;
 
-    txPacket.motionDetected =
-        isMotionDetected();
-
-    txPacket.brightness =
-        environment.brightness;
-
-    txPacket.uptime =
-        millis();
-
-    esp_now_send(
+    esp_err_t result = esp_now_send(
         MASTER_MAC,
         (uint8_t*)&txPacket,
         sizeof(txPacket)
     );
 
-    Serial.print("[HEARTBEAT] ");
-
-    Serial.print("Motion=");
-
+    Serial.print("[HB] Motion=");
     Serial.print(txPacket.motionDetected);
-
-    Serial.print(" Brightness=");
-
+    Serial.print(" Bright=");
     Serial.print(txPacket.brightness);
-
     Serial.print(" Uptime=");
-
-    Serial.println(txPacket.uptime);
+    Serial.print(txPacket.uptime);
+    Serial.println(
+        result == ESP_OK ? "s OK" : "s FAIL"
+    );
 }
 
 void sendMotionStatus(bool motion)
 {
-    txPacket.senderNode =
-        NODE_ID;
+    txPacket = {};
 
-    txPacket.receiverNode =
-        MASTER_NODE;
-
-    txPacket.command =
-        CMD_MOTION;
-
-    txPacket.motionDetected =
-        motion;
+    txPacket.senderNode     = NODE_ID;
+    txPacket.receiverNode   = MASTER_NODE;
+    txPacket.command        = CMD_MOTION;
+    txPacket.motionDetected = motion;
 
     esp_now_send(
         MASTER_MAC,
@@ -231,17 +146,12 @@ void sendMotionStatus(bool motion)
 
 void sendEnvironmentStatus()
 {
-    txPacket.senderNode =
-        NODE_ID;
+    txPacket = {};
 
-    txPacket.receiverNode =
-        MASTER_NODE;
-
-    txPacket.command =
-        CMD_ENVIRONMENT;
-
-    txPacket.brightness =
-        environment.brightness;
+    txPacket.senderNode   = NODE_ID;
+    txPacket.receiverNode = MASTER_NODE;
+    txPacket.command      = CMD_ENVIRONMENT;
+    txPacket.brightness   = environment.brightness;
 
     esp_now_send(
         MASTER_MAC,
@@ -252,4 +162,6 @@ void sendEnvironmentStatus()
 
 void processIncomingPackets()
 {
+    // ESP-NOW is interrupt driven via callback
+    // Nothing needed here
 }

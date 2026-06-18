@@ -2,22 +2,12 @@
 
 #include "node_ids.h"
 
-#define NODE_ID BEDROOM1_NODE
+#define NODE_ID            BEDROOM1_NODE
+#define NODE_NAME          "BEDROOM1"
 
-#define NODE_NAME "BEDROOM1"
-
-// ---- TESTING VALUES (restore before production) ----
-// Production: HEARTBEAT_INTERVAL 30000
-// Production: MOTION_TIMEOUT     300000
+// Testing : 5000   Production: 30000
 #define HEARTBEAT_INTERVAL 5000
 
-#define MOTION_TIMEOUT     6000
-// ----------------------------------------------------
-
-// Time (ms) before master is considered offline
-// Must be > HEARTBEAT_INTERVAL * 3 at minimum
+// Must be > HEARTBEAT_INTERVAL * 3
+// Testing : 20000  Production: 120000
 #define MASTER_TIMEOUT     20000
-
-// LDR threshold: below this = dark, trigger automation
-// ESP32-C3 ADC is 12-bit (0-4095), lower value = brighter
-#define DARK_THRESHOLD     1200

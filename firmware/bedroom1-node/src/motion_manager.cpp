@@ -2,54 +2,55 @@
 
 #include "motion_manager.h"
 #include "pins.h"
-#include "config.h"
 
-bool motionDetected = false;
-
+// Raw GPIO state from RCWL
+static bool rawMotionState    = false;
 static bool previousMotionState = false;
-
-unsigned long lastMotionTime = 0;
 
 void initMotionSensor()
 {
     pinMode(RCWL_PIN, INPUT);
+
+    Serial.println("[MOTION] Sensor initialized");
 }
 
 void updateMotionSensor()
 {
-    bool currentState = digitalRead(RCWL_PIN);
+    bool currentReading = digitalRead(RCWL_PIN);
 
-    if(currentState)
+    // Debug: print only on GPIO state change
+    if (currentReading != rawMotionState)
     {
-        lastMotionTime = millis();
+        Serial.print("[RCWL RAW] GPIO=");
+        Serial.println(currentReading ? "HIGH" : "LOW");
     }
 
-    motionDetected =
-        (millis() - lastMotionTime) < MOTION_TIMEOUT;
+    rawMotionState = currentReading;
 }
 
+// Returns raw RCWL GPIO state
+// Master is responsible for timeout and decision logic
 bool isMotionDetected()
 {
-    return motionDetected;
+    return rawMotionState;
 }
 
 unsigned long getLastMotionTime()
 {
-    return lastMotionTime;
+    // Not used in bedroom1 anymore
+    // Kept for header compatibility
+    return 0;
 }
 
 bool hasMotionChanged()
 {
-    if(previousMotionState != motionDetected)
+    if (previousMotionState != rawMotionState)
     {
-        previousMotionState = motionDetected;
+        previousMotionState = rawMotionState;
 
         Serial.print("[MOTION] ");
-
         Serial.println(
-            motionDetected ?
-            "DETECTED" :
-            "CLEARED"
+            rawMotionState ? "DETECTED" : "CLEARED"
         );
 
         return true;

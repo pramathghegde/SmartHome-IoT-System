@@ -1,11 +1,18 @@
 #pragma once
 
-#define NODE_ID MASTER_NODE
+#include "node_ids.h"
 
+#define NODE_ID   MASTER_NODE
 #define NODE_NAME "MASTER"
 
-#define HEARTBEAT_TIMEOUT 20000
+// Must match bedroom1 MASTER_TIMEOUT
+// Testing : 20000  Production: 120000
+#define HEARTBEAT_TIMEOUT    20000
 
-#define MOTION_TIMEOUT 6000
+// Motion hold time after last RCWL HIGH
+// Testing : 10000  Production: 300000
+#define MOTION_TIMEOUT       10000
 
-#define DARK_THRESHOLD 1200
+// LDR hysteresis thresholds
+#define DARK_THRESHOLD_LOW   1100
+#define DARK_THRESHOLD_HIGH  1300

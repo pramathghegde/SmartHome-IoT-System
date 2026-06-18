@@ -9,3 +9,7 @@ void sendDeviceCommand(
     uint8_t deviceID,
     bool state
 );
+
+void sendAck(uint8_t targetNode);
+
+bool getLastSendSuccess();

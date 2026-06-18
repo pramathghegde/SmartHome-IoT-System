@@ -145,7 +145,7 @@ static void sendStatusToTerminal()
 
     // Day/Night from LDR
     const char* lightStatus =
-        (bedroom1.brightness < DARK_THRESHOLD) ?
+        (bedroom1.brightness < DARK_THRESHOLD_LOW) ?
         "NIGHT" : "DAY  ";
 
     // Clear terminal before printing fresh status
