@@ -1,11 +1,17 @@
 #include <Arduino.h>
 
 #include "motion_manager.h"
+#include "config.h"
 #include "pins.h"
 
 // Raw GPIO state from RCWL
-static bool rawMotionState    = false;
-static bool previousMotionState = false;
+static bool rawMotionState     = false;
+static bool previousRawState   = false;
+static bool previousLatchState = false;
+
+static bool motionLatched = false;
+static bool motionReportedSinceLatch = false;
+static unsigned long lastMotionTime = 0;
 
 void initMotionSensor()
 {
@@ -26,31 +32,59 @@ void updateMotionSensor()
     }
 
     rawMotionState = currentReading;
+
+    if (currentReading && !previousRawState)
+    {
+        Serial.println("[MOTION] Rising Edge");
+
+        motionLatched = true;
+        motionReportedSinceLatch = false;
+        lastMotionTime = millis();
+
+        Serial.println("[MOTION] Latched");
+    }
+
+    previousRawState = currentReading;
+
+    if (
+        motionLatched &&
+        motionReportedSinceLatch &&
+        (millis() - lastMotionTime) > MOTION_TIMEOUT
+    )
+    {
+        motionLatched = false;
+        Serial.println("[MOTION] Cleared");
+    }
 }
 
-// Returns raw RCWL GPIO state
-// Master is responsible for timeout and decision logic
+// Returns latched RCWL motion state, not the raw GPIO state.
 bool isMotionDetected()
 {
-    return rawMotionState;
+    return motionLatched;
+}
+
+void markMotionReported()
+{
+    if (motionLatched)
+    {
+        motionReportedSinceLatch = true;
+    }
 }
 
 unsigned long getLastMotionTime()
 {
-    // Not used in bedroom1 anymore
-    // Kept for header compatibility
-    return 0;
+    return lastMotionTime;
 }
 
 bool hasMotionChanged()
 {
-    if (previousMotionState != rawMotionState)
+    if (previousLatchState != motionLatched)
     {
-        previousMotionState = rawMotionState;
+        previousLatchState = motionLatched;
 
         Serial.print("[MOTION] ");
         Serial.println(
-            rawMotionState ? "DETECTED" : "CLEARED"
+            motionLatched ? "DETECTED" : "CLEARED"
         );
 
         return true;

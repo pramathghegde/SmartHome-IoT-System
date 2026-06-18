@@ -36,7 +36,7 @@ void loop()
 {
     handleOTA();
 
-    updateMotionSensor();   // read raw RCWL GPIO
+    updateMotionSensor();   // update RCWL edge latch
 
     updateLDR();            // read raw ADC
 
@@ -68,5 +68,5 @@ void loop()
 
     updateRelays();
 
-    sendHeartbeat();    // sends raw motion + raw brightness to master
+    sendHeartbeat();    // sends latched motion + raw brightness to master
 }

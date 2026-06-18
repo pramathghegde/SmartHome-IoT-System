@@ -117,6 +117,11 @@ void sendHeartbeat()
         sizeof(txPacket)
     );
 
+    if (txPacket.motionDetected && result == ESP_OK)
+    {
+        markMotionReported();
+    }
+
     Serial.print("[HB] Motion=");
     Serial.print(txPacket.motionDetected);
     Serial.print(" Bright=");
