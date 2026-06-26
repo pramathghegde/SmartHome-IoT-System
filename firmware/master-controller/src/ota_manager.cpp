@@ -9,6 +9,8 @@
 
 void initOTA()
 {
+    WiFi.mode(WIFI_STA);
+
     WiFi.begin(
         WIFI_SSID,
         WIFI_PASSWORD
@@ -17,11 +19,20 @@ void initOTA()
     Serial.print("Hostname: ");
     Serial.println(NODE_NAME);
 
+    unsigned long wifiStart = millis();
+
     while(
-        WiFi.status() != WL_CONNECTED
+        WiFi.status() != WL_CONNECTED &&
+        (millis() - wifiStart) < 15000
     )
     {
         delay(500);
+    }
+
+    if (WiFi.status() != WL_CONNECTED)
+    {
+        Serial.println("[OTA] WiFi FAILED - OTA disabled");
+        return;
     }
 
     ArduinoOTA.setHostname(NODE_NAME);

@@ -2,10 +2,13 @@
 
 RoomState bedroom1 =
 {
-    false,
-    false,
-    0,
-    0,
-    0,
-    0
+    false, // online
+    false, // syncPending
+    false, // motionDetected
+    0,     // brightness
+    0,     // temperature
+    0,     // humidity
+    0,     // lastHeartbeat
+    0,     // lastNodeUptime
+    0      // lastBootCount
 };

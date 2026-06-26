@@ -11,7 +11,6 @@
 
 #include "secrets.h"
 #include <BlynkSimpleEsp32.h>
-#include <WidgetTerminal.h>
 #include <WiFi.h>
 #include <time.h>
 
@@ -27,7 +26,10 @@
 
 char auth[] = BLYNK_AUTH_TOKEN;
 
-WidgetTerminal terminal(200);
+static uint32_t terminalMessagesSent = 0;
+static uint32_t ledMessagesSent      = 0;
+static uint32_t otherMessagesSent    = 0;
+static uint32_t totalMessagesSent    = 0;
 
 // ---------------------------------------------------------------
 // Helpers
@@ -48,6 +50,75 @@ static const char* modeStr(uint8_t mode)
 static const char* stateStr(bool state)
 {
     return state ? " ON" : "OFF";
+}
+
+static void countBlynkMessage(bool terminalMessage, bool ledMessage)
+{
+    if (terminalMessage)
+    {
+        terminalMessagesSent++;
+    }
+    else if (ledMessage)
+    {
+        ledMessagesSent++;
+    }
+    else
+    {
+        otherMessagesSent++;
+    }
+
+    totalMessagesSent++;
+}
+
+static bool auditedVirtualWrite(uint8_t pin, const String& value)
+{
+    if (!Blynk.connected())
+    {
+        Serial.print("[BLYNK] Skipped V");
+        Serial.print(pin);
+        Serial.println(" write; not connected");
+        return false;
+    }
+
+    Blynk.virtualWrite(pin, value);
+    countBlynkMessage(pin == 200, pin >= 150 && pin <= 154);
+    return true;
+}
+
+static bool auditedVirtualWrite(uint8_t pin, int value)
+{
+    if (!Blynk.connected())
+    {
+        Serial.print("[BLYNK] Skipped V");
+        Serial.print(pin);
+        Serial.println(" write; not connected");
+        return false;
+    }
+
+    Blynk.virtualWrite(pin, value);
+    countBlynkMessage(pin == 200, pin >= 150 && pin <= 154);
+    return true;
+}
+
+static void appendLine(String& buffer, const String& line = "")
+{
+    buffer += line;
+    buffer += '\n';
+}
+
+static void printBlynkAudit()
+{
+    Serial.println();
+    Serial.println("[BLYNK AUDIT]");
+    Serial.print("Terminal Messages: ");
+    Serial.println(terminalMessagesSent);
+    Serial.print("LED Messages: ");
+    Serial.println(ledMessagesSent);
+    Serial.print("Other Messages: ");
+    Serial.println(otherMessagesSent);
+    Serial.print("Total Messages: ");
+    Serial.println(totalMessagesSent);
+    Serial.println();
 }
 
 // ---------------------------------------------------------------
@@ -109,12 +180,13 @@ void notifyDeviceStateChange(
             return;
     }
 
-    Blynk.virtualWrite(pin, newState ? 255 : 0);
-
-    Serial.print("[BLYNK] LED V");
-    Serial.print(pin);
-    Serial.print(" -> ");
-    Serial.println(newState ? "ON" : "OFF");
+    if (auditedVirtualWrite(pin, newState ? 255 : 0))
+    {
+        Serial.print("[BLYNK] LED V");
+        Serial.print(pin);
+        Serial.print(" -> ");
+        Serial.println(newState ? "ON" : "OFF");
+    }
 }
 
 // ---------------------------------------------------------------
@@ -148,97 +220,53 @@ static void sendStatusToTerminal()
         (bedroom1.brightness < DARK_THRESHOLD_LOW) ?
         "NIGHT" : "DAY  ";
 
-    // Clear terminal before printing fresh status
-    terminal.clear();
+    String status;
+    status.reserve(900);
 
-    // ---- HEADER ----
-    terminal.println("==============================");
-    terminal.println("   ADVAITA SMART HOME");
-    terminal.print  ("   ");
-    terminal.println(timeStr);
-    terminal.println("==============================");
+    appendLine(status, "==============================");
+    appendLine(status, "   ADVAITA SMART HOME");
+    appendLine(status, String("   ") + timeStr);
+    appendLine(status, "==============================");
 
-    // ---- ENVIRONMENT ----
-    terminal.println();
-    terminal.println("--- ENVIRONMENT ----------");
-    terminal.println("  Temp  : --.- C");        // Future DHT/BME
-    terminal.println("  Humid : --.- %");        // Future DHT/BME
-    terminal.print  ("  Light : ");
-    terminal.println(lightStatus);
-    terminal.print  ("  LDR   : ");
-    terminal.println(bedroom1.brightness);
-    terminal.println("  Door  : ------");        // Future door lock
+    appendLine(status);
+    appendLine(status, "--- ENVIRONMENT ----------");
+    appendLine(status, "  Temp  : --.- C");        // Future DHT/BME
+    appendLine(status, "  Humid : --.- %");        // Future DHT/BME
+    appendLine(status, String("  Light : ") + lightStatus);
+    appendLine(status, String("  LDR   : ") + bedroom1.brightness);
+    appendLine(status, "  Door  : ------");        // Future door lock
 
-    // ---- ROOM STATUS ----
-    terminal.println();
-    terminal.println("--- ROOM STATUS ----------");
+    appendLine(status);
+    appendLine(status, "--- ROOM STATUS ----------");
+    appendLine(status, String("  Bedroom1 : ") + (bedroom1.online ? "ONLINE " : "OFFLINE"));
+    appendLine(status, String("  Motion  : ") + (bedroom1.motionDetected ? "DETECTED" : "CLEAR   "));
+    appendLine(status, "  Bedroom2 : -------");    // Future node
+    appendLine(status, "  Hall     : -------");    // Future node
+    appendLine(status, "  Kitchen  : -------");    // Future node
 
-    terminal.print("  Bedroom1 : ");
-    terminal.println(
-        bedroom1.online ? "ONLINE " : "OFFLINE"
-    );
+    appendLine(status);
+    appendLine(status, "--- APPLIANCES -----------");
+    appendLine(status, String("  Fan    : ") + stateStr(bedroom1Fan.currentState) +
+        "  [" + modeStr(bedroom1Fan.mode) + "]");
+    appendLine(status, String("  Tube   : ") + stateStr(bedroom1Tube.currentState) +
+        "  [" + modeStr(bedroom1Tube.mode) + "]");
+    appendLine(status, String("  Bulb   : ") + stateStr(bedroom1Bulb.currentState) +
+        "  [" + modeStr(bedroom1Bulb.mode) + "]");
+    appendLine(status, String("  Socket : ") + stateStr(bedroom1Socket.currentState) +
+        "  [" + modeStr(bedroom1Socket.mode) + "]");
+    appendLine(status, String("  AC     : ") + stateStr(bedroom1AC.currentState) +
+        "  [" + modeStr(bedroom1AC.mode) + "]");
 
-    terminal.print("  Motion  : ");
-    terminal.println(
-        bedroom1.motionDetected ? "DETECTED" : "CLEAR   "
-    );
+    appendLine(status);
+    appendLine(status, "--- SYSTEM ---------------");
+    appendLine(status, String("  WiFi  : ") + WiFi.RSSI() + " dBm");
+    appendLine(status, String("  Uptime: ") + (millis() / 60000) + " min");
+    appendLine(status, "==============================");
 
-    terminal.println("  Bedroom2 : -------");    // Future node
-    terminal.println("  Hall     : -------");    // Future node
-    terminal.println("  Kitchen  : -------");    // Future node
-
-    // ---- APPLIANCES ----
-    terminal.println();
-    terminal.println("--- APPLIANCES -----------");
-
-    terminal.print("  Fan    : ");
-    terminal.print(stateStr(bedroom1Fan.currentState));
-    terminal.print("  [");
-    terminal.print(modeStr(bedroom1Fan.mode));
-    terminal.println("]");
-
-    terminal.print("  Tube   : ");
-    terminal.print(stateStr(bedroom1Tube.currentState));
-    terminal.print("  [");
-    terminal.print(modeStr(bedroom1Tube.mode));
-    terminal.println("]");
-
-    terminal.print("  Bulb   : ");
-    terminal.print(stateStr(bedroom1Bulb.currentState));
-    terminal.print("  [");
-    terminal.print(modeStr(bedroom1Bulb.mode));
-    terminal.println("]");
-
-    terminal.print("  Socket : ");
-    terminal.print(stateStr(bedroom1Socket.currentState));
-    terminal.print("  [");
-    terminal.print(modeStr(bedroom1Socket.mode));
-    terminal.println("]");
-
-    terminal.print("  AC     : ");
-    terminal.print(stateStr(bedroom1AC.currentState));
-    terminal.print("  [");
-    terminal.print(modeStr(bedroom1AC.mode));
-    terminal.println("]");
-
-    // ---- SYSTEM ----
-    terminal.println();
-    terminal.println("--- SYSTEM ---------------");
-
-    terminal.print("  WiFi  : ");
-    terminal.print(WiFi.RSSI());
-    terminal.println(" dBm");
-
-    terminal.print("  Uptime: ");
-    terminal.print(millis() / 60000);
-    terminal.println(" min");
-
-    terminal.println("==============================");
-
-    // Flush sends everything as one message
-    terminal.flush();
-
-    Serial.println("[BLYNK] Terminal status sent");
+    if (auditedVirtualWrite(200, status))
+    {
+        Serial.println("[BLYNK] Terminal status sent");
+    }
 }
 
 // ---------------------------------------------------------------
@@ -370,23 +398,22 @@ BLYNK_WRITE(V104)
 
 void initDashboard()
 {
-    Blynk.begin(
-        auth,
-        WIFI_SSID,
-        WIFI_PASSWORD
-    );
+    Blynk.config(auth);
 
-    Serial.println("[BLYNK] Connected");
+    if (Blynk.connect(5000))
+    {
+        Serial.println("[BLYNK] Connected");
+    }
+    else
+    {
+        Serial.println("[BLYNK] Connect failed; updateDashboard will retry");
+    }
 
-    // Reset all LEDs on boot
-    Blynk.virtualWrite(150, 0);
-    Blynk.virtualWrite(151, 0);
-    Blynk.virtualWrite(152, 0);
-    Blynk.virtualWrite(153, 0);
-    Blynk.virtualWrite(154, 0);
-
-    // Send first status immediately
-    sendStatusToTerminal();
+    prevFanState    = bedroom1Fan.currentState;
+    prevTubeState   = bedroom1Tube.currentState;
+    prevBulbState   = bedroom1Bulb.currentState;
+    prevSocketState = bedroom1Socket.currentState;
+    prevACState     = bedroom1AC.currentState;
 }
 
 // ---------------------------------------------------------------
@@ -397,13 +424,32 @@ void initDashboard()
 
 void updateDashboard()
 {
+    static unsigned long lastConnectAttempt = 0;
+
+    if (
+        WiFi.status() == WL_CONNECTED &&
+        !Blynk.connected() &&
+        millis() - lastConnectAttempt >= 10000
+    )
+    {
+        lastConnectAttempt = millis();
+        Blynk.connect(1000);
+    }
+
     Blynk.run();
 
     static unsigned long lastSend = 0;
+    static unsigned long lastAudit = 0;
 
     if (millis() - lastSend >= 60000)
     {
         lastSend = millis();
         sendStatusToTerminal();
+    }
+
+    if (millis() - lastAudit >= 300000)
+    {
+        lastAudit = millis();
+        printBlynkAudit();
     }
 }

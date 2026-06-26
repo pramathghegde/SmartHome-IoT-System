@@ -1,4 +1,9 @@
 #include <Arduino.h>
+#include <WiFi.h>
+#include <esp_heap_caps.h>
+#include <esp_task_wdt.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #include "espnow_manager.h"
 #include "ota_manager.h"
@@ -17,21 +22,74 @@ void setup()
     Serial.println("[MASTER] Booting...");
 
     initDeviceCache();
-    initEspNow();
     initOTA();
+    initEspNow();
     initTime();
     initDashboard();
 
     Serial.println("[MASTER] Boot complete");
 }
 
+static void printRuntimeDiagnostics()
+{
+    static unsigned long lastPrint = 0;
+    static unsigned long lastLoop  = 0;
+    static unsigned long maxGap    = 0;
+
+    unsigned long now = millis();
+
+    if (lastLoop != 0)
+    {
+        unsigned long gap = now - lastLoop;
+
+        if (gap > maxGap)
+        {
+            maxGap = gap;
+        }
+    }
+
+    lastLoop = now;
+
+    if (now - lastPrint < 30000)
+    {
+        return;
+    }
+
+    lastPrint = now;
+
+    Serial.println("[DIAG] MASTER");
+    Serial.print("[HEAP] Free=");
+    Serial.print(ESP.getFreeHeap());
+    Serial.print(" Min=");
+    Serial.print(ESP.getMinFreeHeap());
+    Serial.print(" Largest=");
+    Serial.println(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    Serial.print("[STACK] LoopHighWater=");
+    Serial.println(uxTaskGetStackHighWaterMark(nullptr));
+    Serial.print("[WDT] LoopTask=");
+    Serial.println(esp_task_wdt_status(nullptr) == ESP_OK ? "SUBSCRIBED" : "NOT_SUBSCRIBED");
+    Serial.print("[WIFI] Status=");
+    Serial.print(WiFi.status());
+    Serial.print(" Channel=");
+    Serial.print(WiFi.channel());
+    Serial.print(" RSSI=");
+    Serial.println(WiFi.RSSI());
+    Serial.print("[LOOP] MaxGapMs=");
+    Serial.println(maxGap);
+    maxGap = 0;
+
+    printEspNowDiagnostics();
+}
+
 void loop()
 {
     handleOTA();
+    processIncomingPackets();
     updateDashboard();
     checkNodeStatus();
     runAutomation();
     updateTime();
+    printRuntimeDiagnostics();
 
     static unsigned long lastStatus = 0;
 

@@ -19,6 +19,7 @@ void updateHeartbeat(uint8_t nodeID)
             Serial.println(
                 "[NODE] BEDROOM1 ONLINE"
             );
+            bedroom1.syncPending = true;
         }
 
         bedroom1.online = true;

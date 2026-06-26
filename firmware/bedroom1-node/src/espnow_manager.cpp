@@ -1,5 +1,6 @@
-#include <WiFi.h>
 #include <esp_now.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
 
 #include "espnow_manager.h"
 #include "packet.h"
@@ -8,68 +9,137 @@
 #include "node_ids.h"
 #include "mac_addresses.h"
 #include "device_manager.h"
+#include "relay_manager.h"
 #include "motion_manager.h"
 #include "environment_manager.h"
 
 #include <Arduino.h>
 
-static Packet txPacket;
-static unsigned long lastHeartbeat   = 0;
-static unsigned long lastMasterPacket = 0;
+static unsigned long lastHeartbeat       = 0;
+static QueueHandle_t rxQueue             = nullptr;
+static QueueHandle_t relayCommandQueue   = nullptr;
+static volatile uint32_t rxQueueOverflow = 0;
+static volatile uint32_t relayQueueOverflow = 0;
+static volatile uint32_t rxQueueMaxUsed  = 0;
+static volatile uint32_t relayQueueMaxUsed = 0;
+static volatile uint32_t rxPacketsQueued = 0;
+static volatile uint32_t relayPacketsQueued = 0;
+static volatile uint32_t rxCallbacks     = 0;
 
-bool isMasterOnline()
+extern int bootCount;
+
+static bool isValidCommand(uint8_t command)
 {
-    return (millis() - lastMasterPacket) < MASTER_TIMEOUT;
+    switch (command)
+    {
+        case CMD_ACK:
+        case CMD_SET_DEVICE_STATE:
+        case CMD_SET_MODE:
+        case CMD_FAN_SPEED:
+            return true;
+
+        default:
+            return false;
+    }
 }
 
+// ESP-NOW receive callback - runs in ISR context, must be fast
 void onDataRecv(
     const uint8_t *mac,
     const uint8_t *incomingData,
     int len
 )
 {
-    Packet packet;
+    if (len != sizeof(Packet))
+    {
+        return;
+    }
 
+    Packet packet;
     memcpy(&packet, incomingData, sizeof(packet));
 
-    lastMasterPacket = millis();
-
-    switch(packet.command)
+    if (packet.receiverNode != NODE_ID)
     {
-        case CMD_ACK:
-            // Silent - no serial print needed, too noisy
-            break;
+        return;
+    }
 
-        case CMD_SET_DEVICE_STATE:
+    if (!isValidCommand(packet.command))
+    {
+        return;
+    }
 
-            setDeviceState(packet.deviceID, packet.state);
+    rxCallbacks++;
 
-            Serial.print("[CMD] Device=");
-            Serial.print(packet.deviceID);
-            Serial.print(" -> ");
-            Serial.println(packet.state ? "ON" : "OFF");
+    if (rxQueue != nullptr)
+    {
+        QueueHandle_t targetQueue =
+            (packet.command == CMD_SET_DEVICE_STATE) ? relayCommandQueue : rxQueue;
 
-            break;
+        if (targetQueue == nullptr)
+        {
+            if (packet.command == CMD_SET_DEVICE_STATE)
+            {
+                relayQueueOverflow++;
+            }
+            else
+            {
+                rxQueueOverflow++;
+            }
+            return;
+        }
 
-        case CMD_SET_MODE:
+        if (xQueueSend(targetQueue, &packet, 0) != pdTRUE)
+        {
+            if (packet.command == CMD_SET_DEVICE_STATE)
+            {
+                relayQueueOverflow++;
+            }
+            else
+            {
+                rxQueueOverflow++;
+            }
+        }
+        else
+        {
+            UBaseType_t used = uxQueueMessagesWaiting(targetQueue);
 
-            setDeviceMode(packet.deviceID, packet.mode);
+            if (packet.command == CMD_SET_DEVICE_STATE)
+            {
+                relayPacketsQueued++;
 
-            Serial.print("[CMD] Mode Device=");
-            Serial.print(packet.deviceID);
-            Serial.print(" -> ");
-            Serial.println(packet.mode);
+                if (used > relayQueueMaxUsed)
+                {
+                    relayQueueMaxUsed = used;
+                }
+            }
+            else
+            {
+                rxPacketsQueued++;
 
-            break;
-
-        case CMD_FAN_SPEED:
-            break;
+                if (used > rxQueueMaxUsed)
+                {
+                    rxQueueMaxUsed = used;
+                }
+            }
+        }
     }
 }
 
 void initEspNow()
 {
-    WiFi.mode(WIFI_STA);
+    // NOTE: WiFi.mode(WIFI_STA) is NOT called here.
+    // It is called once in initOTA() before esp_now_init().
+    // Calling WiFi.mode() a second time after ESP-NOW init
+    // can disrupt the ESP-NOW stack. Do not add it back.
+
+    relayCommandQueue = xQueueCreate(10, sizeof(Packet));
+    rxQueue = xQueueCreate(20, sizeof(Packet));
+
+    if (rxQueue == nullptr || relayCommandQueue == nullptr)
+    {
+        Serial.println("[ESP-NOW] Failed to create RX queues");
+        return;
+    }
 
     if (esp_now_init() != ESP_OK)
     {
@@ -100,16 +170,15 @@ void sendHeartbeat()
 
     lastHeartbeat = millis();
 
-    txPacket = {};
+    Packet txPacket = {};
 
     txPacket.senderNode     = NODE_ID;
     txPacket.receiverNode   = MASTER_NODE;
     txPacket.command        = CMD_HEARTBEAT;
     txPacket.motionDetected = isMotionDetected();
     txPacket.brightness     = environment.brightness;
-
-    // Uptime in seconds, overflow safe
-    txPacket.uptime = millis() / 1000;
+    txPacket.uptime         = millis() / 1000; // seconds, overflow safe
+    txPacket.bootCount      = bootCount;
 
     esp_err_t result = esp_now_send(
         MASTER_MAC,
@@ -117,25 +186,20 @@ void sendHeartbeat()
         sizeof(txPacket)
     );
 
-    if (txPacket.motionDetected && result == ESP_OK)
-    {
-        markMotionReported();
-    }
-
     Serial.print("[HB] Motion=");
     Serial.print(txPacket.motionDetected);
     Serial.print(" Bright=");
     Serial.print(txPacket.brightness);
     Serial.print(" Uptime=");
     Serial.print(txPacket.uptime);
-    Serial.println(
-        result == ESP_OK ? "s OK" : "s FAIL"
-    );
+    Serial.print("s Boot=");
+    Serial.print(txPacket.bootCount);
+    Serial.println(result == ESP_OK ? " OK" : " FAIL");
 }
 
 void sendMotionStatus(bool motion)
 {
-    txPacket = {};
+    Packet txPacket = {};
 
     txPacket.senderNode     = NODE_ID;
     txPacket.receiverNode   = MASTER_NODE;
@@ -149,9 +213,34 @@ void sendMotionStatus(bool motion)
     );
 }
 
+static void sendCommandAck(uint8_t deviceID, bool state)
+{
+    Packet txPacket = {};
+
+    txPacket.senderNode   = NODE_ID;
+    txPacket.receiverNode = MASTER_NODE;
+    txPacket.command      = CMD_ACK;
+    txPacket.deviceID     = deviceID;
+    txPacket.state        = state;
+    txPacket.uptime       = millis();
+    txPacket.bootCount    = bootCount;
+
+    esp_err_t result = esp_now_send(
+        MASTER_MAC,
+        (uint8_t*)&txPacket,
+        sizeof(txPacket)
+    );
+
+    Serial.print("[ESP SEND] CMD_ACK Device=");
+    Serial.print(deviceID);
+    Serial.print(" State=");
+    Serial.print(state ? "ON" : "OFF");
+    Serial.println(result == ESP_OK ? " queued" : " queue-failed");
+}
+
 void sendEnvironmentStatus()
 {
-    txPacket = {};
+    Packet txPacket = {};
 
     txPacket.senderNode   = NODE_ID;
     txPacket.receiverNode = MASTER_NODE;
@@ -167,6 +256,118 @@ void sendEnvironmentStatus()
 
 void processIncomingPackets()
 {
-    // ESP-NOW is interrupt driven via callback
-    // Nothing needed here
+    if (rxQueue == nullptr || relayCommandQueue == nullptr)
+    {
+        return;
+    }
+
+    // Throttled overflow logging
+    if (rxQueueOverflow > 0)
+    {
+        static unsigned long lastOverflowLog = 0;
+
+        if (millis() - lastOverflowLog > 5000)
+        {
+            Serial.print("[ESP-NOW] Dropped control packets: ");
+            Serial.println(rxQueueOverflow);
+            rxQueueOverflow  = 0;
+            lastOverflowLog  = millis();
+        }
+    }
+
+    if (relayQueueOverflow > 0)
+    {
+        static unsigned long lastRelayOverflowLog = 0;
+
+        if (millis() - lastRelayOverflowLog > 1000)
+        {
+            Serial.print("[ESP-NOW] Dropped relay packets: ");
+            Serial.println(relayQueueOverflow);
+            relayQueueOverflow  = 0;
+            lastRelayOverflowLog  = millis();
+        }
+    }
+
+    Packet packet;
+
+    while (xQueueReceive(relayCommandQueue, &packet, 0) == pdTRUE)
+    {
+        Serial.print("[RX QUEUE POP] Relay cmd=");
+        Serial.print(packet.command);
+        Serial.print(" waiting=");
+        Serial.println(uxQueueMessagesWaiting(relayCommandQueue));
+
+        Serial.print("[COMMAND EXECUTED] Device=");
+        Serial.print(packet.deviceID);
+        Serial.print(" State=");
+        Serial.println(packet.state ? "ON" : "OFF");
+
+        applyRelayCommand(packet.deviceID, packet.state);
+        sendCommandAck(packet.deviceID, packet.state);
+
+        Serial.print("[CMD] Device=");
+        Serial.print(packet.deviceID);
+        Serial.print(" -> ");
+        Serial.println(packet.state ? "ON" : "OFF");
+    }
+
+    while (xQueueReceive(rxQueue, &packet, 0) == pdTRUE)
+    {
+        Serial.print("[RX QUEUE POP] Cmd=");
+        Serial.print(packet.command);
+        Serial.print(" waiting=");
+        Serial.println(uxQueueMessagesWaiting(rxQueue));
+
+        switch(packet.command)
+        {
+            case CMD_ACK:
+                // Silent. ACK just confirms master is alive.
+                // Bedroom1 takes no action based on master presence.
+                break;
+
+            case CMD_SET_MODE:
+                setDeviceMode(packet.deviceID, packet.mode);
+
+                Serial.print("[CMD] Mode Device=");
+                Serial.print(packet.deviceID);
+                Serial.print(" -> ");
+                Serial.println(packet.mode);
+                break;
+
+            case CMD_FAN_SPEED:
+                // Reserved for future fan speed control
+                break;
+
+            default:
+                break;
+        }
+    }
+}
+
+void printEspNowDiagnostics()
+{
+    if (rxQueue == nullptr || relayCommandQueue == nullptr)
+    {
+        Serial.println("[QUEUE] ESP-NOW RX queues not created");
+        return;
+    }
+
+    Serial.print("[QUEUE] ESP-NOW RX free=");
+    Serial.print(uxQueueSpacesAvailable(rxQueue));
+    Serial.print("/20 dropped=");
+    Serial.print(rxQueueOverflow);
+    Serial.print(" maxUsed=");
+    Serial.print(rxQueueMaxUsed);
+    Serial.print(" queued=");
+    Serial.print(rxPacketsQueued);
+    Serial.print(" callbacks=");
+    Serial.println(rxCallbacks);
+    Serial.print("[QUEUE] RELAY RX free=");
+    Serial.print(uxQueueSpacesAvailable(relayCommandQueue));
+    Serial.print("/10 dropped=");
+    Serial.print(relayQueueOverflow);
+    Serial.print(" maxUsed=");
+    Serial.print(relayQueueMaxUsed);
+    Serial.print(" queued=");
+    Serial.println(relayPacketsQueued);
 }

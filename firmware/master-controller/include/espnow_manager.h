@@ -4,7 +4,7 @@
 
 void initEspNow();
 
-void sendDeviceCommand(
+bool sendDeviceCommand(
     uint8_t targetNode,
     uint8_t deviceID,
     bool state
@@ -13,3 +13,7 @@ void sendDeviceCommand(
 void sendAck(uint8_t targetNode);
 
 bool getLastSendSuccess();
+
+void processIncomingPackets();
+
+void printEspNowDiagnostics();

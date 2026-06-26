@@ -1,17 +1,14 @@
 #include <Arduino.h>
 
 #include "motion_manager.h"
-#include "config.h"
 #include "pins.h"
 
-// Raw GPIO state from RCWL
-static bool rawMotionState     = false;
-static bool previousRawState   = false;
-static bool previousLatchState = false;
+// Raw GPIO state from RCWL only.
+// No latch. No timeout. No motion duration decisions.
+// All decision logic belongs to master exclusively.
 
-static bool motionLatched = false;
-static bool motionReportedSinceLatch = false;
-static unsigned long lastMotionTime = 0;
+static bool rawMotionState      = false;
+static bool previousMotionState = false;
 
 void initMotionSensor()
 {
@@ -24,71 +21,41 @@ void updateMotionSensor()
 {
     bool currentReading = digitalRead(RCWL_PIN);
 
-    // Debug: print only on GPIO state change
+    // Print only on GPIO state change to keep serial clean
     if (currentReading != rawMotionState)
     {
-        Serial.print("[RCWL RAW] GPIO=");
+        Serial.print("[RCWL] ");
         Serial.println(currentReading ? "HIGH" : "LOW");
     }
 
     rawMotionState = currentReading;
-
-    if (currentReading && !previousRawState)
-    {
-        Serial.println("[MOTION] Rising Edge");
-
-        motionLatched = true;
-        motionReportedSinceLatch = false;
-        lastMotionTime = millis();
-
-        Serial.println("[MOTION] Latched");
-    }
-
-    previousRawState = currentReading;
-
-    if (
-        motionLatched &&
-        motionReportedSinceLatch &&
-        (millis() - lastMotionTime) > MOTION_TIMEOUT
-    )
-    {
-        motionLatched = false;
-        Serial.println("[MOTION] Cleared");
-    }
 }
 
-// Returns latched RCWL motion state, not the raw GPIO state.
+// Returns raw RCWL GPIO state.
+// True = RCWL currently HIGH (motion pulse active right now).
+// Master applies its own MOTION_TIMEOUT to this raw value.
 bool isMotionDetected()
 {
-    return motionLatched;
-}
-
-void markMotionReported()
-{
-    if (motionLatched)
-    {
-        motionReportedSinceLatch = true;
-    }
-}
-
-unsigned long getLastMotionTime()
-{
-    return lastMotionTime;
+    return rawMotionState;
 }
 
 bool hasMotionChanged()
 {
-    if (previousLatchState != motionLatched)
+    if (previousMotionState != rawMotionState)
     {
-        previousLatchState = motionLatched;
+        previousMotionState = rawMotionState;
 
         Serial.print("[MOTION] ");
-        Serial.println(
-            motionLatched ? "DETECTED" : "CLEARED"
-        );
+        Serial.println(rawMotionState ? "DETECTED" : "CLEARED");
 
         return true;
     }
 
     return false;
+}
+
+unsigned long getLastMotionTime()
+{
+    // Not used in bedroom1. Kept for header compatibility.
+    return 0;
 }

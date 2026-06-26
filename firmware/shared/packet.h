@@ -23,4 +23,8 @@ struct Packet
     int brightness;
 
     uint32_t uptime;
+
+    uint32_t bootCount;
 };
+
+static_assert(sizeof(Packet) == 20, "Packet size mismatch; master and nodes must use the same packet layout");

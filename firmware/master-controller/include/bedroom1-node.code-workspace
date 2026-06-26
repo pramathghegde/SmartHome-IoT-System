@@ -1,10 +1,6 @@
 {
 	"folders": [
 		{
-			"path": "../../.."
-		},
-		{
-			"name": "bedroom1-node",
 			"path": "../../bedroom1-node"
 		},
 		{
