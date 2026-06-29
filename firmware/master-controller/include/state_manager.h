@@ -20,6 +20,11 @@ struct RoomState
     uint32_t lastNodeUptime;
 
     uint32_t lastBootCount;
+
+    uint8_t lastResetReason;
+    uint8_t lastWiFiStatus;
+    uint32_t lastMinHeapKb;
+    uint32_t lastLoopStackHighWater;
 };
 
 extern RoomState bedroom1;
