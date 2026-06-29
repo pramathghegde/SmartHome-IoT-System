@@ -1,6 +1,7 @@
 #include <esp_now.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
+#include <WiFi.h>
 
 #include "espnow_manager.h"
 #include "packet.h"
@@ -179,6 +180,16 @@ void sendHeartbeat()
     txPacket.brightness     = environment.brightness;
     txPacket.uptime         = millis() / 1000; // seconds, overflow safe
     txPacket.bootCount      = bootCount;
+
+    // Pack diagnostics into unused fields of the heartbeat packet
+    txPacket.deviceID       = (uint8_t)esp_reset_reason();
+    txPacket.state          = (uint8_t)WiFi.status();
+    
+    uint32_t minHeapKb      = ESP.getMinFreeHeap() / 1024;
+    txPacket.mode           = (minHeapKb > 255) ? 255 : (uint8_t)minHeapKb;
+    
+    uint32_t stackHighWater = uxTaskGetStackHighWaterMark(nullptr) / 32;
+    txPacket.fanSpeed       = (stackHighWater > 255) ? 255 : (uint8_t)stackHighWater;
 
     esp_err_t result = esp_now_send(
         MASTER_MAC,
