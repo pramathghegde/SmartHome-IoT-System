@@ -197,24 +197,6 @@ bool sendDeviceCommand(
     return false;
 }
 
-static const char* resetReasonName(uint8_t reason)
-{
-    switch (reason)
-    {
-        case 1:  return "POWERON";
-        case 2:  return "EXTERNAL";
-        case 3:  return "SOFTWARE";
-        case 4:  return "PANIC";
-        case 5:  return "INT_WDT";
-        case 6:  return "TASK_WDT";
-        case 7:  return "WDT";
-        case 8:  return "DEEPSLEEP";
-        case 9:  return "BROWNOUT";
-        case 10: return "SDIO";
-        default: return "UNKNOWN";
-    }
-}
-
 void processIncomingPackets()
 {
     if (rxQueue == nullptr)
@@ -269,20 +251,10 @@ void processIncomingPackets()
                 Serial.print(" Uptime=");
                 Serial.print(packet.uptime);
                 Serial.print("s Boot=");
-                Serial.print(packet.bootCount);
+                Serial.println(packet.bootCount);
 
                 if (packet.senderNode == BEDROOM1_NODE)
                 {
-                    Serial.print(" ResetReason=");
-                    Serial.print(resetReasonName(packet.deviceID));
-                    Serial.print(" WiFiStatus=");
-                    Serial.print(packet.state);
-                    Serial.print(" MinHeap=");
-                    Serial.print(packet.mode);
-                    Serial.print("KB StackRemaining=");
-                    Serial.print(packet.fanSpeed * 32);
-                    Serial.println(" B");
-
                     if (
                         bedroom1.lastHeartbeat != 0 &&
                         (
@@ -298,18 +270,10 @@ void processIncomingPackets()
                     bedroom1.brightness     = packet.brightness;
                     bedroom1.lastNodeUptime = packet.uptime;
                     bedroom1.lastBootCount  = packet.bootCount;
-                    bedroom1.lastResetReason = packet.deviceID;
-                    bedroom1.lastWiFiStatus  = packet.state;
-                    bedroom1.lastMinHeapKb   = packet.mode;
-                    bedroom1.lastLoopStackHighWater = packet.fanSpeed * 32;
 
                     updateHeartbeat(packet.senderNode);
 
                     sendAck(BEDROOM1_NODE);
-                }
-                else
-                {
-                    Serial.println();
                 }
                 break;
 

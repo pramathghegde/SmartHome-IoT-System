@@ -35,24 +35,6 @@ static uint32_t totalMessagesSent    = 0;
 // Helpers
 // ---------------------------------------------------------------
 
-static const char* resetReasonName(uint8_t reason)
-{
-    switch (reason)
-    {
-        case 1:  return "POWERON";
-        case 2:  return "EXTERNAL";
-        case 3:  return "SOFTWARE";
-        case 4:  return "PANIC";
-        case 5:  return "INT_WDT";
-        case 6:  return "TASK_WDT";
-        case 7:  return "WDT";
-        case 8:  return "DEEPSLEEP";
-        case 9:  return "BROWNOUT";
-        case 10: return "SDIO";
-        default: return "UNKNOWN";
-    }
-}
-
 static const char* modeStr(uint8_t mode)
 {
     switch(mode)
@@ -258,14 +240,6 @@ static void sendStatusToTerminal()
     appendLine(status, "--- ROOM STATUS ----------");
     appendLine(status, String("  Bedroom1 : ") + (bedroom1.online ? "ONLINE " : "OFFLINE"));
     appendLine(status, String("  Motion  : ") + (bedroom1.motionDetected ? "DETECTED" : "CLEAR   "));
-    if (bedroom1.online)
-    {
-        appendLine(status, String("  Reason  : ") + resetReasonName(bedroom1.lastResetReason) + " (" + bedroom1.lastResetReason + ")");
-        appendLine(status, String("  BootCnt : ") + bedroom1.lastBootCount);
-        appendLine(status, String("  MinHeap : ") + bedroom1.lastMinHeapKb + " KB");
-        appendLine(status, String("  WiFiSt  : ") + bedroom1.lastWiFiStatus);
-        appendLine(status, String("  StackRem: ") + bedroom1.lastLoopStackHighWater + " B");
-    }
     appendLine(status, "  Bedroom2 : -------");    // Future node
     appendLine(status, "  Hall     : -------");    // Future node
     appendLine(status, "  Kitchen  : -------");    // Future node
