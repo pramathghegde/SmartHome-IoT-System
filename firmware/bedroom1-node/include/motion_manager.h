@@ -4,7 +4,7 @@ void initMotionSensor();
 
 void updateMotionSensor();
 
-// Returns raw RCWL GPIO state only.
+// Returns raw Motion Sensor GPIO state only.
 // No latch, no timeout, no decision logic.
 // Master receives this raw value and applies all timeout/decision logic.
 bool isMotionDetected();

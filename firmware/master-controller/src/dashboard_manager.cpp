@@ -100,6 +100,23 @@ static bool auditedVirtualWrite(uint8_t pin, int value)
     return true;
 }
 
+static bool auditedVirtualWriteSchedule(uint8_t pin, const DeviceConfig &device)
+{
+    if (!Blynk.connected())
+    {
+        Serial.print("[BLYNK] Skipped V");
+        Serial.print(pin);
+        Serial.println(" write; not connected");
+        return false;
+    }
+
+    uint32_t startSec = device.startHour * 3600 + device.startMinute * 60;
+    uint32_t stopSec = device.stopHour * 3600 + device.stopMinute * 60;
+    Blynk.virtualWrite(pin, startSec, stopSec, "Asia/Kolkata");
+    countBlynkMessage(false, false);
+    return true;
+}
+
 static void appendLine(String& buffer, const String& line = "")
 {
     buffer += line;
@@ -132,6 +149,87 @@ static bool prevSocketState = false;
 static bool prevACState     = false;
 
 // ---------------------------------------------------------------
+// Blynk synchronization cache
+// ---------------------------------------------------------------
+static uint8_t blynkFanModeCache        = 0xFF;
+static uint8_t blynkTubeModeCache       = 0xFF;
+static uint8_t blynkBulbModeCache       = 0xFF;
+static uint8_t blynkSocketModeCache     = 0xFF;
+static uint8_t blynkACModeCache         = 0xFF;
+
+static DeviceConfig blynkFanCache       = {0xFF, false, 0xFF, 0xFF, 0xFF, 0xFF};
+static DeviceConfig blynkTubeCache      = {0xFF, false, 0xFF, 0xFF, 0xFF, 0xFF};
+static DeviceConfig blynkBulbCache      = {0xFF, false, 0xFF, 0xFF, 0xFF, 0xFF};
+static DeviceConfig blynkSocketCache    = {0xFF, false, 0xFF, 0xFF, 0xFF, 0xFF};
+static DeviceConfig blynkACCache        = {0xFF, false, 0xFF, 0xFF, 0xFF, 0xFF};
+
+static uint8_t blynkLdrEnableCache      = 0xFF;
+
+static bool blynkCacheInitialized = false;
+
+static bool writeModeIfChanged(uint8_t pin, uint8_t currentVal, uint8_t &cachedVal)
+{
+    if (!blynkCacheInitialized || currentVal != cachedVal)
+    {
+        if (auditedVirtualWrite(pin, currentVal))
+        {
+            cachedVal = currentVal;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool writeScheduleIfChanged(uint8_t pin, const DeviceConfig &device, DeviceConfig &cachedDevice)
+{
+    bool changed = !blynkCacheInitialized ||
+                   device.startHour != cachedDevice.startHour ||
+                   device.startMinute != cachedDevice.startMinute ||
+                   device.stopHour != cachedDevice.stopHour ||
+                   device.stopMinute != cachedDevice.stopMinute;
+
+    if (changed)
+    {
+        if (auditedVirtualWriteSchedule(pin, device))
+        {
+            cachedDevice.startHour = device.startHour;
+            cachedDevice.startMinute = device.startMinute;
+            cachedDevice.stopHour = device.stopHour;
+            cachedDevice.stopMinute = device.stopMinute;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool writeLdrEnableIfChanged(uint8_t pin, bool currentVal, uint8_t &cachedVal)
+{
+    uint8_t currentByte = currentVal ? 1 : 0;
+    if (!blynkCacheInitialized || currentByte != cachedVal)
+    {
+        if (auditedVirtualWrite(pin, currentByte))
+        {
+            cachedVal = currentByte;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool writeLedIfChanged(uint8_t pin, bool currentVal, bool &cachedVal)
+{
+    if (!blynkCacheInitialized || currentVal != cachedVal)
+    {
+        if (auditedVirtualWrite(pin, currentVal ? 255 : 0))
+        {
+            cachedVal = currentVal;
+            return true;
+        }
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------
 // notifyDeviceStateChange()
 // Called from automation_manager on every relay change
 // Sends LED update for that device only = 1 message per change
@@ -142,46 +240,28 @@ void notifyDeviceStateChange(
     bool newState
 )
 {
-    int pin = -1;
-
+    bool success = false;
     switch(deviceID)
     {
-        case FAN_DEVICE:
-            if (newState == prevFanState) return;
-            prevFanState = newState;
-            pin = 150;
-            break;
-
-        case TUBELIGHT_DEVICE:
-            if (newState == prevTubeState) return;
-            prevTubeState = newState;
-            pin = 151;
-            break;
-
-        case BULB_DEVICE:
-            if (newState == prevBulbState) return;
-            prevBulbState = newState;
-            pin = 152;
-            break;
-
-        case SOCKET_DEVICE:
-            if (newState == prevSocketState) return;
-            prevSocketState = newState;
-            pin = 153;
-            break;
-
-        case AC_DEVICE:
-            if (newState == prevACState) return;
-            prevACState = newState;
-            pin = 154;
-            break;
-
-        default:
-            return;
+        case FAN_DEVICE:       success = writeLedIfChanged(150, newState, prevFanState);    break;
+        case TUBELIGHT_DEVICE: success = writeLedIfChanged(151, newState, prevTubeState);   break;
+        case BULB_DEVICE:      success = writeLedIfChanged(152, newState, prevBulbState);   break;
+        case SOCKET_DEVICE:    success = writeLedIfChanged(153, newState, prevSocketState); break;
+        case AC_DEVICE:        success = writeLedIfChanged(154, newState, prevACState);     break;
+        default: return;
     }
 
-    if (auditedVirtualWrite(pin, newState ? 255 : 0))
+    if (success)
     {
+        int pin = -1;
+        switch(deviceID)
+        {
+            case FAN_DEVICE:       pin = 150; break;
+            case TUBELIGHT_DEVICE: pin = 151; break;
+            case BULB_DEVICE:      pin = 152; break;
+            case SOCKET_DEVICE:    pin = 153; break;
+            case AC_DEVICE:        pin = 154; break;
+        }
         Serial.print("[BLYNK] LED V");
         Serial.print(pin);
         Serial.print(" -> ");
@@ -278,6 +358,8 @@ BLYNK_WRITE(V0)
     bedroom1Fan.mode = param.asInt();
     Serial.print("[BLYNK] FAN MODE -> ");
     Serial.println(bedroom1Fan.mode);
+    saveSingleDevice("fan", bedroom1Fan);
+    blynkFanModeCache = bedroom1Fan.mode;
 }
 
 BLYNK_WRITE(V1)
@@ -285,6 +367,8 @@ BLYNK_WRITE(V1)
     bedroom1Tube.mode = param.asInt();
     Serial.print("[BLYNK] TUBE MODE -> ");
     Serial.println(bedroom1Tube.mode);
+    saveSingleDevice("tube", bedroom1Tube);
+    blynkTubeModeCache = bedroom1Tube.mode;
 }
 
 BLYNK_WRITE(V2)
@@ -292,6 +376,8 @@ BLYNK_WRITE(V2)
     bedroom1Bulb.mode = param.asInt();
     Serial.print("[BLYNK] BULB MODE -> ");
     Serial.println(bedroom1Bulb.mode);
+    saveSingleDevice("bulb", bedroom1Bulb);
+    blynkBulbModeCache = bedroom1Bulb.mode;
 }
 
 BLYNK_WRITE(V3)
@@ -299,6 +385,8 @@ BLYNK_WRITE(V3)
     bedroom1Socket.mode = param.asInt();
     Serial.print("[BLYNK] SOCKET MODE -> ");
     Serial.println(bedroom1Socket.mode);
+    saveSingleDevice("sock", bedroom1Socket);
+    blynkSocketModeCache = bedroom1Socket.mode;
 }
 
 BLYNK_WRITE(V4)
@@ -306,6 +394,8 @@ BLYNK_WRITE(V4)
     bedroom1AC.mode = param.asInt();
     Serial.print("[BLYNK] AC MODE -> ");
     Serial.println(bedroom1AC.mode);
+    saveSingleDevice("ac", bedroom1AC);
+    blynkACModeCache = bedroom1AC.mode;
 }
 
 // ---------------------------------------------------------------
@@ -326,6 +416,11 @@ BLYNK_WRITE(V100)
         bedroom1Fan.stopMinute = t.getStopMinute();
     }
     Serial.println("[BLYNK] FAN SCHEDULE updated");
+    saveSingleDevice("fan", bedroom1Fan);
+    blynkFanCache.startHour = bedroom1Fan.startHour;
+    blynkFanCache.startMinute = bedroom1Fan.startMinute;
+    blynkFanCache.stopHour = bedroom1Fan.stopHour;
+    blynkFanCache.stopMinute = bedroom1Fan.stopMinute;
 }
 
 BLYNK_WRITE(V101)
@@ -342,6 +437,11 @@ BLYNK_WRITE(V101)
         bedroom1Tube.stopMinute = t.getStopMinute();
     }
     Serial.println("[BLYNK] TUBE SCHEDULE updated");
+    saveSingleDevice("tube", bedroom1Tube);
+    blynkTubeCache.startHour = bedroom1Tube.startHour;
+    blynkTubeCache.startMinute = bedroom1Tube.startMinute;
+    blynkTubeCache.stopHour = bedroom1Tube.stopHour;
+    blynkTubeCache.stopMinute = bedroom1Tube.stopMinute;
 }
 
 BLYNK_WRITE(V102)
@@ -358,6 +458,11 @@ BLYNK_WRITE(V102)
         bedroom1Bulb.stopMinute = t.getStopMinute();
     }
     Serial.println("[BLYNK] BULB SCHEDULE updated");
+    saveSingleDevice("bulb", bedroom1Bulb);
+    blynkBulbCache.startHour = bedroom1Bulb.startHour;
+    blynkBulbCache.startMinute = bedroom1Bulb.startMinute;
+    blynkBulbCache.stopHour = bedroom1Bulb.stopHour;
+    blynkBulbCache.stopMinute = bedroom1Bulb.stopMinute;
 }
 
 BLYNK_WRITE(V103)
@@ -374,6 +479,11 @@ BLYNK_WRITE(V103)
         bedroom1Socket.stopMinute = t.getStopMinute();
     }
     Serial.println("[BLYNK] SOCKET SCHEDULE updated");
+    saveSingleDevice("sock", bedroom1Socket);
+    blynkSocketCache.startHour = bedroom1Socket.startHour;
+    blynkSocketCache.startMinute = bedroom1Socket.startMinute;
+    blynkSocketCache.stopHour = bedroom1Socket.stopHour;
+    blynkSocketCache.stopMinute = bedroom1Socket.stopMinute;
 }
 
 BLYNK_WRITE(V104)
@@ -390,6 +500,60 @@ BLYNK_WRITE(V104)
         bedroom1AC.stopMinute = t.getStopMinute();
     }
     Serial.println("[BLYNK] AC SCHEDULE updated");
+    saveSingleDevice("ac", bedroom1AC);
+    blynkACCache.startHour = bedroom1AC.startHour;
+    blynkACCache.startMinute = bedroom1AC.startMinute;
+    blynkACCache.stopHour = bedroom1AC.stopHour;
+    blynkACCache.stopMinute = bedroom1AC.stopMinute;
+}
+
+#define BLYNK_WRITE_PIN(pin) BLYNK_WRITE_PIN_HIDDEN(pin)
+#define BLYNK_WRITE_PIN_HIDDEN(pin) BLYNK_WRITE(pin)
+
+BLYNK_WRITE_PIN(VPIN_B1_LDR_ENABLE)
+{
+    bedroom1LdrEnabled = (param.asInt() == 1);
+    Serial.print("[BLYNK] LDR ENABLE -> ");
+    Serial.println(bedroom1LdrEnabled ? "ON" : "OFF");
+    saveRoomLdrEnabled(bedroom1LdrEnabled);
+    blynkLdrEnableCache = param.asInt();
+}
+
+void updateAllBlynkWidgets()
+{
+    Serial.println("[BLYNK] Updating all widgets to match current configuration (cache filtered)...");
+
+    // Mode widgets: V0-V4
+    writeModeIfChanged(0, bedroom1Fan.mode, blynkFanModeCache);
+    writeModeIfChanged(1, bedroom1Tube.mode, blynkTubeModeCache);
+    writeModeIfChanged(2, bedroom1Bulb.mode, blynkBulbModeCache);
+    writeModeIfChanged(3, bedroom1Socket.mode, blynkSocketModeCache);
+    writeModeIfChanged(4, bedroom1AC.mode, blynkACModeCache);
+
+    // Schedule widgets: V100-V104
+    writeScheduleIfChanged(100, bedroom1Fan, blynkFanCache);
+    writeScheduleIfChanged(101, bedroom1Tube, blynkTubeCache);
+    writeScheduleIfChanged(102, bedroom1Bulb, blynkBulbCache);
+    writeScheduleIfChanged(103, bedroom1Socket, blynkSocketCache);
+    writeScheduleIfChanged(104, bedroom1AC, blynkACCache);
+
+    // LDR Enable Switch Widget
+    writeLdrEnableIfChanged(VPIN_B1_LDR_ENABLE_NUM, bedroom1LdrEnabled, blynkLdrEnableCache);
+
+    // LED widgets: V150-V154
+    writeLedIfChanged(150, bedroom1Fan.currentState, prevFanState);
+    writeLedIfChanged(151, bedroom1Tube.currentState, prevTubeState);
+    writeLedIfChanged(152, bedroom1Bulb.currentState, prevBulbState);
+    writeLedIfChanged(153, bedroom1Socket.currentState, prevSocketState);
+    writeLedIfChanged(154, bedroom1AC.currentState, prevACState);
+
+    blynkCacheInitialized = true;
+}
+
+BLYNK_CONNECTED()
+{
+    Serial.println("[BLYNK] Connected callback triggered");
+    updateAllBlynkWidgets();
 }
 
 // ---------------------------------------------------------------

@@ -35,7 +35,7 @@ static PendingCmd pending[5] = {};
 
 // ---------------------------------------------------------------
 // Motion timeout - master owns this completely
-// Receives raw RCWL state from bedroom1, applies duration logic here
+// Receives raw Motion Sensor state from bedroom1, applies duration logic here
 // ---------------------------------------------------------------
 
 static unsigned long lastMotionTime = 0;
@@ -93,7 +93,7 @@ static bool isItDark()
 
 // ---------------------------------------------------------------
 // getAutoState() - per device type logic
-// Lighting (tube, bulb): motion AND dark
+// Lighting (tube, bulb): motion AND dark (if LDR enabled)
 // Non-lighting (fan, socket, AC): motion only
 // ---------------------------------------------------------------
 
@@ -105,6 +105,10 @@ static bool getAutoState(uint8_t deviceID)
     {
         case TUBELIGHT_DEVICE:
         case BULB_DEVICE:
+            if (!bedroom1LdrEnabled)
+            {
+                return bedroom1.motionDetected;
+            }
             return (bedroom1.motionDetected && dark);
 
         case FAN_DEVICE:

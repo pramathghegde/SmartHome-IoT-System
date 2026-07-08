@@ -1,7 +1,7 @@
 #pragma once
 
 #define LDR_PIN            4
-#define RCWL_PIN           0
+#define MOTION_SENSOR_PIN   0
 
 #define BULB_RELAY_PIN     5
 #define TUBE_RELAY_PIN     6

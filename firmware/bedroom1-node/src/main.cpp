@@ -141,7 +141,7 @@ void loop()
 {
     handleOTA();
 
-    updateMotionSensor();   // read raw RCWL GPIO
+    updateMotionSensor();   // read raw Motion Sensor GPIO
 
     if (hasMotionChanged() && isMotionDetected())
     {

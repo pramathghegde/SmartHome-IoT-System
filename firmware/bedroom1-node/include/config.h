@@ -7,9 +7,8 @@
 
 // How often bedroom1 sends heartbeat to master
 // Testing : 5000   Production: 30000
-// NOTE: 1000ms was too fast - caused ESP-NOW channel congestion
 // when combined with ACK packets and Blynk WiFi traffic
-#define HEARTBEAT_INTERVAL 2000
+#define HEARTBEAT_INTERVAL 1000
 
 // MASTER_TIMEOUT REMOVED intentionally.
 // Bedroom1 must NEVER change relay state because master is absent.
@@ -18,4 +17,4 @@
 
 // MOTION_TIMEOUT REMOVED intentionally.
 // Motion timeout is a decision. Decisions belong to master only.
-// Bedroom1 reports raw RCWL GPIO state. Master decides duration.
+// Bedroom1 reports raw Motion Sensor GPIO state. Master decides duration.
