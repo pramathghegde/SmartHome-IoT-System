@@ -2,6 +2,5 @@
 
 #include "device_cache.h"
 
-bool isScheduleActive(
-    DeviceConfig &device
-);
+bool isAutoScheduleActive(const DeviceConfig &device);
+bool isSchedScheduleActive(const DeviceConfig &device);

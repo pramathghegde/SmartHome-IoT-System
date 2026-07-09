@@ -11,3 +11,4 @@ void notifyDeviceStateChange(
     bool newState
 );
 void updateAllBlynkWidgets();
+void setDeviceMode(uint8_t deviceID, uint8_t newMode);

@@ -13,11 +13,17 @@ struct DeviceConfig
 
     bool currentState;
 
-    uint8_t startHour;
-    uint8_t startMinute;
+    // AUTO Mode Schedule
+    uint8_t autoStartHour;
+    uint8_t autoStartMinute;
+    uint8_t autoStopHour;
+    uint8_t autoStopMinute;
 
-    uint8_t stopHour;
-    uint8_t stopMinute;
+    // SCHEDULE Mode Schedule
+    uint8_t schedStartHour;
+    uint8_t schedStartMinute;
+    uint8_t schedStopHour;
+    uint8_t schedStopMinute;
 };
 
 extern DeviceConfig bedroom1Fan;

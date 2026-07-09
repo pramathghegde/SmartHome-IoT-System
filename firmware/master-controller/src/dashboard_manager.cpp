@@ -100,7 +100,7 @@ static bool auditedVirtualWrite(uint8_t pin, int value)
     return true;
 }
 
-static bool auditedVirtualWriteSchedule(uint8_t pin, const DeviceConfig &device)
+static bool auditedVirtualWriteSchedule(uint8_t pin, uint8_t startHour, uint8_t startMinute, uint8_t stopHour, uint8_t stopMinute)
 {
     if (!Blynk.connected())
     {
@@ -110,8 +110,8 @@ static bool auditedVirtualWriteSchedule(uint8_t pin, const DeviceConfig &device)
         return false;
     }
 
-    uint32_t startSec = device.startHour * 3600 + device.startMinute * 60;
-    uint32_t stopSec = device.stopHour * 3600 + device.stopMinute * 60;
+    uint32_t startSec = startHour * 3600 + startMinute * 60;
+    uint32_t stopSec = stopHour * 3600 + stopMinute * 60;
     Blynk.virtualWrite(pin, startSec, stopSec, "Asia/Kolkata");
     countBlynkMessage(false, false);
     return true;
@@ -157,11 +157,23 @@ static uint8_t blynkBulbModeCache       = 0xFF;
 static uint8_t blynkSocketModeCache     = 0xFF;
 static uint8_t blynkACModeCache         = 0xFF;
 
-static DeviceConfig blynkFanCache       = {0xFF, false, 0xFF, 0xFF, 0xFF, 0xFF};
-static DeviceConfig blynkTubeCache      = {0xFF, false, 0xFF, 0xFF, 0xFF, 0xFF};
-static DeviceConfig blynkBulbCache      = {0xFF, false, 0xFF, 0xFF, 0xFF, 0xFF};
-static DeviceConfig blynkSocketCache    = {0xFF, false, 0xFF, 0xFF, 0xFF, 0xFF};
-static DeviceConfig blynkACCache        = {0xFF, false, 0xFF, 0xFF, 0xFF, 0xFF};
+struct BlynkTimerCache
+{
+    uint8_t startHour;
+    uint8_t startMinute;
+    uint8_t stopHour;
+    uint8_t stopMinute;
+    bool hasStart;
+    bool hasStop;
+    uint8_t weekdays;
+    char timezone[32];
+};
+
+static BlynkTimerCache blynkFanCache       = {0xFF, 0xFF, 0xFF, 0xFF, false, false, 0x00, ""};
+static BlynkTimerCache blynkTubeCache      = {0xFF, 0xFF, 0xFF, 0xFF, false, false, 0x00, ""};
+static BlynkTimerCache blynkBulbCache      = {0xFF, 0xFF, 0xFF, 0xFF, false, false, 0x00, ""};
+static BlynkTimerCache blynkSocketCache    = {0xFF, 0xFF, 0xFF, 0xFF, false, false, 0x00, ""};
+static BlynkTimerCache blynkACCache        = {0xFF, 0xFF, 0xFF, 0xFF, false, false, 0x00, ""};
 
 static uint8_t blynkLdrEnableCache      = 0xFF;
 
@@ -180,26 +192,50 @@ static bool writeModeIfChanged(uint8_t pin, uint8_t currentVal, uint8_t &cachedV
     return false;
 }
 
-static bool writeScheduleIfChanged(uint8_t pin, const DeviceConfig &device, DeviceConfig &cachedDevice)
+static bool timerSyncInProgress = false;
+
+static bool writeTimerIfChanged(uint8_t pin, uint8_t startHour, uint8_t startMinute, uint8_t stopHour, uint8_t stopMinute, BlynkTimerCache &cache)
 {
     bool changed = !blynkCacheInitialized ||
-                   device.startHour != cachedDevice.startHour ||
-                   device.startMinute != cachedDevice.startMinute ||
-                   device.stopHour != cachedDevice.stopHour ||
-                   device.stopMinute != cachedDevice.stopMinute;
+                   startHour != cache.startHour ||
+                   startMinute != cache.startMinute ||
+                   stopHour != cache.stopHour ||
+                   stopMinute != cache.stopMinute ||
+                   !cache.hasStart || !cache.hasStop ||
+                   strcmp(cache.timezone, "Asia/Kolkata") != 0 ||
+                   cache.weekdays != 0x7F;
 
     if (changed)
     {
-        if (auditedVirtualWriteSchedule(pin, device))
+        timerSyncInProgress = true;
+        bool success = auditedVirtualWriteSchedule(pin, startHour, startMinute, stopHour, stopMinute);
+        timerSyncInProgress = false;
+        if (success)
         {
-            cachedDevice.startHour = device.startHour;
-            cachedDevice.startMinute = device.startMinute;
-            cachedDevice.stopHour = device.stopHour;
-            cachedDevice.stopMinute = device.stopMinute;
+            cache.startHour = startHour;
+            cache.startMinute = startMinute;
+            cache.stopHour = stopHour;
+            cache.stopMinute = stopMinute;
+            cache.hasStart = true;
+            cache.hasStop = true;
+            cache.weekdays = 0x7F;
+            snprintf(cache.timezone, sizeof(cache.timezone), "Asia/Kolkata");
             return true;
         }
     }
     return false;
+}
+
+static void syncTimerWidget(uint8_t pin, const DeviceConfig &device, BlynkTimerCache &cache)
+{
+    if (device.mode == 2) // MODE_AUTO
+    {
+        writeTimerIfChanged(pin, device.autoStartHour, device.autoStartMinute, device.autoStopHour, device.autoStopMinute, cache);
+    }
+    else // MODE_SCHEDULED, MODE_ON, MODE_OFF
+    {
+        writeTimerIfChanged(pin, device.schedStartHour, device.schedStartMinute, device.schedStopHour, device.schedStopMinute, cache);
+    }
 }
 
 static bool writeLdrEnableIfChanged(uint8_t pin, bool currentVal, uint8_t &cachedVal)
@@ -349,53 +385,192 @@ static void sendStatusToTerminal()
     }
 }
 
+static void handleIncomingTimer(const char* prefix, DeviceConfig &device, const TimeInputParam &t, BlynkTimerCache &cache)
+{
+    if (device.mode == 0) // MODE_OFF
+    {
+        Serial.println("[TIMER] Ignored (Mode OFF)");
+        return;
+    }
+    if (device.mode == 1) // MODE_ON
+    {
+        Serial.println("[TIMER] Ignored (Mode ON)");
+        return;
+    }
+
+    // Extract complete state from t
+    uint8_t incomingStartH = t.hasStartTime() ? t.getStartHour() : 0;
+    uint8_t incomingStartM = t.hasStartTime() ? t.getStartMinute() : 0;
+    uint8_t incomingStopH  = t.hasStopTime() ? t.getStopHour() : 0;
+    uint8_t incomingStopM  = t.hasStopTime() ? t.getStopMinute() : 0;
+    bool incomingHasStart   = t.hasStartTime();
+    bool incomingHasStop    = t.hasStopTime();
+
+    uint8_t incomingWeekdays = 0;
+    for (int i = 1; i <= 7; i++)
+    {
+        if (t.isWeekdaySelected(i))
+        {
+            incomingWeekdays |= (1 << (i - 1));
+        }
+    }
+
+    String incomingTz = t.getTZ();
+
+    // Check against cache
+    bool cacheMatches = blynkCacheInitialized &&
+                        incomingStartH == cache.startHour &&
+                        incomingStartM == cache.startMinute &&
+                        incomingStopH == cache.stopHour &&
+                        incomingStopM == cache.stopMinute &&
+                        incomingHasStart == cache.hasStart &&
+                        incomingHasStop == cache.hasStop &&
+                        incomingWeekdays == cache.weekdays &&
+                        incomingTz.equals(cache.timezone);
+
+    if (cacheMatches)
+    {
+        // Everything matches the cache (including weekdays, tz, etc.) -> suppress redundant logic!
+        return;
+    }
+
+    // Cache did not match, update NVS if hours/minutes changed
+    if (device.mode == 2) // MODE_AUTO
+    {
+        uint8_t newStartH = t.hasStartTime() ? t.getStartHour() : device.autoStartHour;
+        uint8_t newStartM = t.hasStartTime() ? t.getStartMinute() : device.autoStartMinute;
+        uint8_t newStopH  = t.hasStopTime() ? t.getStopHour() : device.autoStopHour;
+        uint8_t newStopM  = t.hasStopTime() ? t.getStopMinute() : device.autoStopMinute;
+
+        bool nvsChanged = (newStartH != device.autoStartHour ||
+                           newStartM != device.autoStartMinute ||
+                           newStopH  != device.autoStopHour ||
+                           newStopM  != device.autoStopMinute);
+
+        if (nvsChanged)
+        {
+            device.autoStartHour   = newStartH;
+            device.autoStartMinute = newStartM;
+            device.autoStopHour   = newStopH;
+            device.autoStopMinute = newStopM;
+            saveSingleDevice(prefix, device);
+            Serial.printf("[BLYNK] %s AUTO SCHEDULE updated\n", prefix);
+        }
+    }
+    else if (device.mode == 3) // MODE_SCHEDULED
+    {
+        uint8_t newStartH = t.hasStartTime() ? t.getStartHour() : device.schedStartHour;
+        uint8_t newStartM = t.hasStartTime() ? t.getStartMinute() : device.schedStartMinute;
+        uint8_t newStopH  = t.hasStopTime() ? t.getStopHour() : device.schedStopHour;
+        uint8_t newStopM  = t.hasStopTime() ? t.getStopMinute() : device.schedStopMinute;
+
+        bool nvsChanged = (newStartH != device.schedStartHour ||
+                           newStartM != device.schedStartMinute ||
+                           newStopH  != device.schedStopHour ||
+                           newStopM  != device.schedStopMinute);
+
+        if (nvsChanged)
+        {
+            device.schedStartHour   = newStartH;
+            device.schedStartMinute = newStartM;
+            device.schedStopHour   = newStopH;
+            device.schedStopMinute = newStopM;
+            saveSingleDevice(prefix, device);
+            Serial.printf("[BLYNK] %s SCHEDULE SCHEDULE updated\n", prefix);
+        }
+    }
+
+    // Always update cache to match the exact state that came from Blynk
+    cache.startHour = incomingStartH;
+    cache.startMinute = incomingStartM;
+    cache.stopHour = incomingStopH;
+    cache.stopMinute = incomingStopM;
+    cache.hasStart = incomingHasStart;
+    cache.hasStop = incomingHasStop;
+    cache.weekdays = incomingWeekdays;
+    snprintf(cache.timezone, sizeof(cache.timezone), "%s", incomingTz.c_str());
+}
+
+void setDeviceMode(uint8_t deviceID, uint8_t newMode)
+{
+    DeviceConfig* device = nullptr;
+    BlynkTimerCache* cache = nullptr;
+    uint8_t* modeCache = nullptr;
+    const char* prefix = nullptr;
+
+    switch (deviceID)
+    {
+        case FAN_DEVICE:
+            device = &bedroom1Fan;
+            cache = &blynkFanCache;
+            modeCache = &blynkFanModeCache;
+            prefix = "fan";
+            break;
+        case TUBELIGHT_DEVICE:
+            device = &bedroom1Tube;
+            cache = &blynkTubeCache;
+            modeCache = &blynkTubeModeCache;
+            prefix = "tube";
+            break;
+        case BULB_DEVICE:
+            device = &bedroom1Bulb;
+            cache = &blynkBulbCache;
+            modeCache = &blynkBulbModeCache;
+            prefix = "bulb";
+            break;
+        case SOCKET_DEVICE:
+            device = &bedroom1Socket;
+            cache = &blynkSocketCache;
+            modeCache = &blynkSocketModeCache;
+            prefix = "sock";
+            break;
+        case AC_DEVICE:
+            device = &bedroom1AC;
+            cache = &blynkACCache;
+            modeCache = &blynkACModeCache;
+            prefix = "ac";
+            break;
+        default:
+            return;
+    }
+
+    if (device->mode != newMode)
+    {
+        device->mode = newMode;
+        saveSingleDevice(prefix, *device);
+        writeModeIfChanged(deviceID - 1, newMode, *modeCache);
+        syncTimerWidget(100 + (deviceID - 1), *device, *cache);
+        Serial.printf("[MODE CHANGE] Device=%d Mode=%d\n", deviceID, newMode);
+    }
+}
+
 // ---------------------------------------------------------------
 // V0-V4 : Mode Controls (Blynk → Master)
 // ---------------------------------------------------------------
 
 BLYNK_WRITE(V0)
 {
-    bedroom1Fan.mode = param.asInt();
-    Serial.print("[BLYNK] FAN MODE -> ");
-    Serial.println(bedroom1Fan.mode);
-    saveSingleDevice("fan", bedroom1Fan);
-    blynkFanModeCache = bedroom1Fan.mode;
+    setDeviceMode(FAN_DEVICE, param.asInt());
 }
 
 BLYNK_WRITE(V1)
 {
-    bedroom1Tube.mode = param.asInt();
-    Serial.print("[BLYNK] TUBE MODE -> ");
-    Serial.println(bedroom1Tube.mode);
-    saveSingleDevice("tube", bedroom1Tube);
-    blynkTubeModeCache = bedroom1Tube.mode;
+    setDeviceMode(TUBELIGHT_DEVICE, param.asInt());
 }
 
 BLYNK_WRITE(V2)
 {
-    bedroom1Bulb.mode = param.asInt();
-    Serial.print("[BLYNK] BULB MODE -> ");
-    Serial.println(bedroom1Bulb.mode);
-    saveSingleDevice("bulb", bedroom1Bulb);
-    blynkBulbModeCache = bedroom1Bulb.mode;
+    setDeviceMode(BULB_DEVICE, param.asInt());
 }
 
 BLYNK_WRITE(V3)
 {
-    bedroom1Socket.mode = param.asInt();
-    Serial.print("[BLYNK] SOCKET MODE -> ");
-    Serial.println(bedroom1Socket.mode);
-    saveSingleDevice("sock", bedroom1Socket);
-    blynkSocketModeCache = bedroom1Socket.mode;
+    setDeviceMode(SOCKET_DEVICE, param.asInt());
 }
 
 BLYNK_WRITE(V4)
 {
-    bedroom1AC.mode = param.asInt();
-    Serial.print("[BLYNK] AC MODE -> ");
-    Serial.println(bedroom1AC.mode);
-    saveSingleDevice("ac", bedroom1AC);
-    blynkACModeCache = bedroom1AC.mode;
+    setDeviceMode(AC_DEVICE, param.asInt());
 }
 
 // ---------------------------------------------------------------
@@ -404,107 +579,37 @@ BLYNK_WRITE(V4)
 
 BLYNK_WRITE(V100)
 {
+    if (timerSyncInProgress) return;
     TimeInputParam t(param);
-    if (t.hasStartTime())
-    {
-        bedroom1Fan.startHour   = t.getStartHour();
-        bedroom1Fan.startMinute = t.getStartMinute();
-    }
-    if (t.hasStopTime())
-    {
-        bedroom1Fan.stopHour   = t.getStopHour();
-        bedroom1Fan.stopMinute = t.getStopMinute();
-    }
-    Serial.println("[BLYNK] FAN SCHEDULE updated");
-    saveSingleDevice("fan", bedroom1Fan);
-    blynkFanCache.startHour = bedroom1Fan.startHour;
-    blynkFanCache.startMinute = bedroom1Fan.startMinute;
-    blynkFanCache.stopHour = bedroom1Fan.stopHour;
-    blynkFanCache.stopMinute = bedroom1Fan.stopMinute;
+    handleIncomingTimer("fan", bedroom1Fan, t, blynkFanCache);
 }
 
 BLYNK_WRITE(V101)
 {
+    if (timerSyncInProgress) return;
     TimeInputParam t(param);
-    if (t.hasStartTime())
-    {
-        bedroom1Tube.startHour   = t.getStartHour();
-        bedroom1Tube.startMinute = t.getStartMinute();
-    }
-    if (t.hasStopTime())
-    {
-        bedroom1Tube.stopHour   = t.getStopHour();
-        bedroom1Tube.stopMinute = t.getStopMinute();
-    }
-    Serial.println("[BLYNK] TUBE SCHEDULE updated");
-    saveSingleDevice("tube", bedroom1Tube);
-    blynkTubeCache.startHour = bedroom1Tube.startHour;
-    blynkTubeCache.startMinute = bedroom1Tube.startMinute;
-    blynkTubeCache.stopHour = bedroom1Tube.stopHour;
-    blynkTubeCache.stopMinute = bedroom1Tube.stopMinute;
+    handleIncomingTimer("tube", bedroom1Tube, t, blynkTubeCache);
 }
 
 BLYNK_WRITE(V102)
 {
+    if (timerSyncInProgress) return;
     TimeInputParam t(param);
-    if (t.hasStartTime())
-    {
-        bedroom1Bulb.startHour   = t.getStartHour();
-        bedroom1Bulb.startMinute = t.getStartMinute();
-    }
-    if (t.hasStopTime())
-    {
-        bedroom1Bulb.stopHour   = t.getStopHour();
-        bedroom1Bulb.stopMinute = t.getStopMinute();
-    }
-    Serial.println("[BLYNK] BULB SCHEDULE updated");
-    saveSingleDevice("bulb", bedroom1Bulb);
-    blynkBulbCache.startHour = bedroom1Bulb.startHour;
-    blynkBulbCache.startMinute = bedroom1Bulb.startMinute;
-    blynkBulbCache.stopHour = bedroom1Bulb.stopHour;
-    blynkBulbCache.stopMinute = bedroom1Bulb.stopMinute;
+    handleIncomingTimer("bulb", bedroom1Bulb, t, blynkBulbCache);
 }
 
 BLYNK_WRITE(V103)
 {
+    if (timerSyncInProgress) return;
     TimeInputParam t(param);
-    if (t.hasStartTime())
-    {
-        bedroom1Socket.startHour   = t.getStartHour();
-        bedroom1Socket.startMinute = t.getStartMinute();
-    }
-    if (t.hasStopTime())
-    {
-        bedroom1Socket.stopHour   = t.getStopHour();
-        bedroom1Socket.stopMinute = t.getStopMinute();
-    }
-    Serial.println("[BLYNK] SOCKET SCHEDULE updated");
-    saveSingleDevice("sock", bedroom1Socket);
-    blynkSocketCache.startHour = bedroom1Socket.startHour;
-    blynkSocketCache.startMinute = bedroom1Socket.startMinute;
-    blynkSocketCache.stopHour = bedroom1Socket.stopHour;
-    blynkSocketCache.stopMinute = bedroom1Socket.stopMinute;
+    handleIncomingTimer("sock", bedroom1Socket, t, blynkSocketCache);
 }
 
 BLYNK_WRITE(V104)
 {
+    if (timerSyncInProgress) return;
     TimeInputParam t(param);
-    if (t.hasStartTime())
-    {
-        bedroom1AC.startHour   = t.getStartHour();
-        bedroom1AC.startMinute = t.getStartMinute();
-    }
-    if (t.hasStopTime())
-    {
-        bedroom1AC.stopHour   = t.getStopHour();
-        bedroom1AC.stopMinute = t.getStopMinute();
-    }
-    Serial.println("[BLYNK] AC SCHEDULE updated");
-    saveSingleDevice("ac", bedroom1AC);
-    blynkACCache.startHour = bedroom1AC.startHour;
-    blynkACCache.startMinute = bedroom1AC.startMinute;
-    blynkACCache.stopHour = bedroom1AC.stopHour;
-    blynkACCache.stopMinute = bedroom1AC.stopMinute;
+    handleIncomingTimer("ac", bedroom1AC, t, blynkACCache);
 }
 
 #define BLYNK_WRITE_PIN(pin) BLYNK_WRITE_PIN_HIDDEN(pin)
@@ -523,29 +628,29 @@ void updateAllBlynkWidgets()
 {
     Serial.println("[BLYNK] Updating all widgets to match current configuration (cache filtered)...");
 
-    // Mode widgets: V0-V4
+    // 1. Mode widgets: V0-V4
     writeModeIfChanged(0, bedroom1Fan.mode, blynkFanModeCache);
     writeModeIfChanged(1, bedroom1Tube.mode, blynkTubeModeCache);
     writeModeIfChanged(2, bedroom1Bulb.mode, blynkBulbModeCache);
     writeModeIfChanged(3, bedroom1Socket.mode, blynkSocketModeCache);
     writeModeIfChanged(4, bedroom1AC.mode, blynkACModeCache);
 
-    // Schedule widgets: V100-V104
-    writeScheduleIfChanged(100, bedroom1Fan, blynkFanCache);
-    writeScheduleIfChanged(101, bedroom1Tube, blynkTubeCache);
-    writeScheduleIfChanged(102, bedroom1Bulb, blynkBulbCache);
-    writeScheduleIfChanged(103, bedroom1Socket, blynkSocketCache);
-    writeScheduleIfChanged(104, bedroom1AC, blynkACCache);
-
-    // LDR Enable Switch Widget
+    // 2. LDR Enable Switch Widget
     writeLdrEnableIfChanged(VPIN_B1_LDR_ENABLE_NUM, bedroom1LdrEnabled, blynkLdrEnableCache);
 
-    // LED widgets: V150-V154
+    // 3. LED widgets: V150-V154
     writeLedIfChanged(150, bedroom1Fan.currentState, prevFanState);
     writeLedIfChanged(151, bedroom1Tube.currentState, prevTubeState);
     writeLedIfChanged(152, bedroom1Bulb.currentState, prevBulbState);
     writeLedIfChanged(153, bedroom1Socket.currentState, prevSocketState);
     writeLedIfChanged(154, bedroom1AC.currentState, prevACState);
+
+    // 4. Timer/Schedule widgets: V100-V104
+    syncTimerWidget(100, bedroom1Fan, blynkFanCache);
+    syncTimerWidget(101, bedroom1Tube, blynkTubeCache);
+    syncTimerWidget(102, bedroom1Bulb, blynkBulbCache);
+    syncTimerWidget(103, bedroom1Socket, blynkSocketCache);
+    syncTimerWidget(104, bedroom1AC, blynkACCache);
 
     blynkCacheInitialized = true;
 }

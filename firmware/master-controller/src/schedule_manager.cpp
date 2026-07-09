@@ -2,34 +2,25 @@
 
 #include "time_manager.h"
 
-bool isScheduleActive(
-    DeviceConfig &device
-)
+static bool isTimeInSchedule(uint8_t startHour, uint8_t startMinute, uint8_t stopHour, uint8_t stopMinute)
 {
-    int current =
-        getHour() * 60 +
-        getMinute();
+    int current = getHour() * 60 + getMinute();
+    int start   = startHour * 60 + startMinute;
+    int stop    = stopHour * 60 + stopMinute;
 
-    int start =
-        device.startHour * 60 +
-        device.startMinute;
-
-    int stop =
-        device.stopHour * 60 +
-        device.stopMinute;
-
-    if(start < stop)
+    if (start < stop)
     {
-        return
-        (
-            current >= start &&
-            current < stop
-        );
+        return (current >= start && current < stop);
     }
+    return (current >= start || current < stop);
+}
 
-    return
-    (
-        current >= start ||
-        current < stop
-    );
+bool isAutoScheduleActive(const DeviceConfig &device)
+{
+    return isTimeInSchedule(device.autoStartHour, device.autoStartMinute, device.autoStopHour, device.autoStopMinute);
+}
+
+bool isSchedScheduleActive(const DeviceConfig &device)
+{
+    return isTimeInSchedule(device.schedStartHour, device.schedStartMinute, device.schedStopHour, device.schedStopMinute);
 }

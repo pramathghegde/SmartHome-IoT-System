@@ -140,10 +140,10 @@ static void processDevice(
 
     switch(device.mode)
     {
-        case MODE_OFF:       desiredState = false;                    break;
-        case MODE_ON:        desiredState = true;                     break;
-        case MODE_AUTO:      desiredState = getAutoState(deviceID);   break;
-        case MODE_SCHEDULED: desiredState = isScheduleActive(device); break;
+        case MODE_OFF:       desiredState = false;                                                    break;
+        case MODE_ON:        desiredState = true;                                                     break;
+        case MODE_AUTO:      desiredState = isAutoScheduleActive(device) ? getAutoState(deviceID) : false; break;
+        case MODE_SCHEDULED: desiredState = isSchedScheduleActive(device);                            break;
     }
 
     // No pending command: check if one is needed
@@ -247,10 +247,10 @@ static void forceDeviceSync(
 
     switch(device.mode)
     {
-        case MODE_OFF:       desiredState = false;                    break;
-        case MODE_ON:        desiredState = true;                     break;
-        case MODE_AUTO:      desiredState = getAutoState(deviceID);   break;
-        case MODE_SCHEDULED: desiredState = isScheduleActive(device); break;
+        case MODE_OFF:       desiredState = false;                                                    break;
+        case MODE_ON:        desiredState = true;                                                     break;
+        case MODE_AUTO:      desiredState = isAutoScheduleActive(device) ? getAutoState(deviceID) : false; break;
+        case MODE_SCHEDULED: desiredState = isSchedScheduleActive(device);                            break;
     }
 
     pending[idx].active      = true;

@@ -27,24 +27,48 @@ bool validateConfiguration(DeviceConfig &device, const DeviceConfig &defaultConf
         device.mode = defaultConfig.mode;
         valid = false;
     }
-    if (device.startHour > 23)
+
+    // Validate AUTO schedule
+    if (device.autoStartHour > 23)
     {
-        device.startHour = defaultConfig.startHour;
+        device.autoStartHour = defaultConfig.autoStartHour;
         valid = false;
     }
-    if (device.startMinute > 59)
+    if (device.autoStartMinute > 59)
     {
-        device.startMinute = defaultConfig.startMinute;
+        device.autoStartMinute = defaultConfig.autoStartMinute;
         valid = false;
     }
-    if (device.stopHour > 23)
+    if (device.autoStopHour > 23)
     {
-        device.stopHour = defaultConfig.stopHour;
+        device.autoStopHour = defaultConfig.autoStopHour;
         valid = false;
     }
-    if (device.stopMinute > 59)
+    if (device.autoStopMinute > 59)
     {
-        device.stopMinute = defaultConfig.stopMinute;
+        device.autoStopMinute = defaultConfig.autoStopMinute;
+        valid = false;
+    }
+
+    // Validate SCHEDULE schedule
+    if (device.schedStartHour > 23)
+    {
+        device.schedStartHour = defaultConfig.schedStartHour;
+        valid = false;
+    }
+    if (device.schedStartMinute > 59)
+    {
+        device.schedStartMinute = defaultConfig.schedStartMinute;
+        valid = false;
+    }
+    if (device.schedStopHour > 23)
+    {
+        device.schedStopHour = defaultConfig.schedStopHour;
+        valid = false;
+    }
+    if (device.schedStopMinute > 59)
+    {
+        device.schedStopMinute = defaultConfig.schedStopMinute;
         valid = false;
     }
 
@@ -58,17 +82,31 @@ void saveDeviceConfiguration(Preferences &prefs, const char* prefix, const Devic
     snprintf(key, sizeof(key), "%s_mode", prefix);
     putUCharIfChanged(prefs, key, device.mode);
 
-    snprintf(key, sizeof(key), "%s_st_h", prefix);
-    putUCharIfChanged(prefs, key, device.startHour);
+    // Save AUTO schedule
+    snprintf(key, sizeof(key), "%s_a_st_h", prefix);
+    putUCharIfChanged(prefs, key, device.autoStartHour);
 
-    snprintf(key, sizeof(key), "%s_st_m", prefix);
-    putUCharIfChanged(prefs, key, device.startMinute);
+    snprintf(key, sizeof(key), "%s_a_st_m", prefix);
+    putUCharIfChanged(prefs, key, device.autoStartMinute);
 
-    snprintf(key, sizeof(key), "%s_sp_h", prefix);
-    putUCharIfChanged(prefs, key, device.stopHour);
+    snprintf(key, sizeof(key), "%s_a_sp_h", prefix);
+    putUCharIfChanged(prefs, key, device.autoStopHour);
 
-    snprintf(key, sizeof(key), "%s_sp_m", prefix);
-    putUCharIfChanged(prefs, key, device.stopMinute);
+    snprintf(key, sizeof(key), "%s_a_sp_m", prefix);
+    putUCharIfChanged(prefs, key, device.autoStopMinute);
+
+    // Save SCHEDULE schedule
+    snprintf(key, sizeof(key), "%s_s_st_h", prefix);
+    putUCharIfChanged(prefs, key, device.schedStartHour);
+
+    snprintf(key, sizeof(key), "%s_s_st_m", prefix);
+    putUCharIfChanged(prefs, key, device.schedStartMinute);
+
+    snprintf(key, sizeof(key), "%s_s_sp_h", prefix);
+    putUCharIfChanged(prefs, key, device.schedStopHour);
+
+    snprintf(key, sizeof(key), "%s_s_sp_m", prefix);
+    putUCharIfChanged(prefs, key, device.schedStopMinute);
 }
 
 bool loadDeviceConfiguration(Preferences &prefs, const char* prefix, DeviceConfig &device, const DeviceConfig &defaultConfig)
@@ -80,21 +118,39 @@ bool loadDeviceConfiguration(Preferences &prefs, const char* prefix, DeviceConfi
     if (prefs.isKey(key)) device.mode = prefs.getUChar(key);
     else { device.mode = defaultConfig.mode; keysMissing = true; }
 
-    snprintf(key, sizeof(key), "%s_st_h", prefix);
-    if (prefs.isKey(key)) device.startHour = prefs.getUChar(key);
-    else { device.startHour = defaultConfig.startHour; keysMissing = true; }
+    // Load AUTO schedule
+    snprintf(key, sizeof(key), "%s_a_st_h", prefix);
+    if (prefs.isKey(key)) device.autoStartHour = prefs.getUChar(key);
+    else { device.autoStartHour = defaultConfig.autoStartHour; keysMissing = true; }
 
-    snprintf(key, sizeof(key), "%s_st_m", prefix);
-    if (prefs.isKey(key)) device.startMinute = prefs.getUChar(key);
-    else { device.startMinute = defaultConfig.startMinute; keysMissing = true; }
+    snprintf(key, sizeof(key), "%s_a_st_m", prefix);
+    if (prefs.isKey(key)) device.autoStartMinute = prefs.getUChar(key);
+    else { device.autoStartMinute = defaultConfig.autoStartMinute; keysMissing = true; }
 
-    snprintf(key, sizeof(key), "%s_sp_h", prefix);
-    if (prefs.isKey(key)) device.stopHour = prefs.getUChar(key);
-    else { device.stopHour = defaultConfig.stopHour; keysMissing = true; }
+    snprintf(key, sizeof(key), "%s_a_sp_h", prefix);
+    if (prefs.isKey(key)) device.autoStopHour = prefs.getUChar(key);
+    else { device.autoStopHour = defaultConfig.autoStopHour; keysMissing = true; }
 
-    snprintf(key, sizeof(key), "%s_sp_m", prefix);
-    if (prefs.isKey(key)) device.stopMinute = prefs.getUChar(key);
-    else { device.stopMinute = defaultConfig.stopMinute; keysMissing = true; }
+    snprintf(key, sizeof(key), "%s_a_sp_m", prefix);
+    if (prefs.isKey(key)) device.autoStopMinute = prefs.getUChar(key);
+    else { device.autoStopMinute = defaultConfig.autoStopMinute; keysMissing = true; }
+
+    // Load SCHEDULE schedule
+    snprintf(key, sizeof(key), "%s_s_st_h", prefix);
+    if (prefs.isKey(key)) device.schedStartHour = prefs.getUChar(key);
+    else { device.schedStartHour = defaultConfig.schedStartHour; keysMissing = true; }
+
+    snprintf(key, sizeof(key), "%s_s_st_m", prefix);
+    if (prefs.isKey(key)) device.schedStartMinute = prefs.getUChar(key);
+    else { device.schedStartMinute = defaultConfig.schedStartMinute; keysMissing = true; }
+
+    snprintf(key, sizeof(key), "%s_s_sp_h", prefix);
+    if (prefs.isKey(key)) device.schedStopHour = prefs.getUChar(key);
+    else { device.schedStopHour = defaultConfig.schedStopHour; keysMissing = true; }
+
+    snprintf(key, sizeof(key), "%s_s_sp_m", prefix);
+    if (prefs.isKey(key)) device.schedStopMinute = prefs.getUChar(key);
+    else { device.schedStopMinute = defaultConfig.schedStopMinute; keysMissing = true; }
 
     device.currentState = defaultConfig.currentState; // DO NOT load currentState
 
@@ -136,11 +192,11 @@ void loadConfiguration()
     prefs.begin("automation", false);
 
     // Safe Defaults
-    DeviceConfig defaultFan    = { 2, false, 23, 0, 5, 0 };  // MODE_AUTO = 2
-    DeviceConfig defaultTube   = { 2, false, 18, 0, 23, 0 };
-    DeviceConfig defaultBulb   = { 2, false, 18, 0, 23, 0 };
-    DeviceConfig defaultSocket = { 0, false, 0, 0, 0, 0 };   // MODE_OFF = 0
-    DeviceConfig defaultAC     = { 0, false, 0, 0, 0, 0 };
+    DeviceConfig defaultFan    = { 2, false, 23, 0, 5, 0,  23, 0, 5, 0 };  // MODE_AUTO = 2
+    DeviceConfig defaultTube   = { 2, false, 18, 0, 23, 0, 18, 0, 23, 0 };
+    DeviceConfig defaultBulb   = { 2, false, 18, 0, 23, 0, 18, 0, 23, 0 };
+    DeviceConfig defaultSocket = { 0, false, 0, 0, 0, 0,  0, 0, 0, 0 };   // MODE_OFF = 0
+    DeviceConfig defaultAC     = { 0, false, 0, 0, 0, 0,  0, 0, 0, 0 };
 
     bool fanOk  = loadDeviceConfiguration(prefs, "fan",  bedroom1Fan,    defaultFan);
     bool tubeOk = loadDeviceConfiguration(prefs, "tube", bedroom1Tube,   defaultTube);
@@ -206,12 +262,20 @@ void printRestoredConfiguration()
     Serial.printf("Socket   : %s\n", getModeName(bedroom1Socket.mode));
     Serial.printf("AC       : %s\n", getModeName(bedroom1AC.mode));
     Serial.printf("LDR Enable: %s\n", bedroom1LdrEnabled ? "ON" : "OFF");
-    Serial.println("Schedules:");
-    Serial.printf("Fan      %02u:%02u - %02u:%02u\n", bedroom1Fan.startHour, bedroom1Fan.startMinute, bedroom1Fan.stopHour, bedroom1Fan.stopMinute);
-    Serial.printf("Tube     %02u:%02u - %02u:%02u\n", bedroom1Tube.startHour, bedroom1Tube.startMinute, bedroom1Tube.stopHour, bedroom1Tube.stopMinute);
-    Serial.printf("Bulb     %02u:%02u - %02u:%02u\n", bedroom1Bulb.startHour, bedroom1Bulb.startMinute, bedroom1Bulb.stopHour, bedroom1Bulb.stopMinute);
-    Serial.printf("Socket   %02u:%02u - %02u:%02u\n", bedroom1Socket.startHour, bedroom1Socket.startMinute, bedroom1Socket.stopHour, bedroom1Socket.stopMinute);
-    Serial.printf("AC       %02u:%02u - %02u:%02u\n", bedroom1AC.startHour, bedroom1AC.startMinute, bedroom1AC.stopHour, bedroom1AC.stopMinute);
+    Serial.println("Schedules (AUTO / SCHEDULE):");
+
+    auto printDualSchedule = [](const char* name, const DeviceConfig &device) {
+        Serial.printf("%-9sAUTO: %02u:%02u - %02u:%02u  |  SCHED: %02u:%02u - %02u:%02u\n",
+                      name,
+                      device.autoStartHour, device.autoStartMinute, device.autoStopHour, device.autoStopMinute,
+                      device.schedStartHour, device.schedStartMinute, device.schedStopHour, device.schedStopMinute);
+    };
+
+    printDualSchedule("Fan", bedroom1Fan);
+    printDualSchedule("Tube", bedroom1Tube);
+    printDualSchedule("Bulb", bedroom1Bulb);
+    printDualSchedule("Socket", bedroom1Socket);
+    printDualSchedule("AC", bedroom1AC);
     Serial.println("=================================");
 }
 
