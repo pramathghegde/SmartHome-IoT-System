@@ -55,7 +55,7 @@ static void updateMotionTimeout()
 {
     if (
         bedroom1.motionDetected &&
-        (millis() - lastMotionTime) >= MOTION_TIMEOUT
+        (millis() - lastMotionTime) >= bedroom1Config.motionTimeoutMs
     )
     {
         bedroom1.motionDetected = false;

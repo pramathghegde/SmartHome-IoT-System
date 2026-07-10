@@ -8,6 +8,36 @@ DeviceConfig bedroom1Bulb;
 DeviceConfig bedroom1Socket;
 DeviceConfig bedroom1AC;
 bool bedroom1LdrEnabled = true;
+RoomConfig bedroom1Config;
+
+static void calculateMotionTimeoutMs(RoomConfig &config)
+{
+    config.motionTimeoutMs = (unsigned long)config.motionTimeoutHour * 3600000UL +
+                             (unsigned long)config.motionTimeoutMinute * 60000UL +
+                             (unsigned long)config.motionTimeoutSecond * 1000UL;
+}
+
+void clampRoomMotionTimeout(RoomConfig &config)
+{
+    unsigned long seconds = (unsigned long)config.motionTimeoutHour * 3600UL +
+                            (unsigned long)config.motionTimeoutMinute * 60UL +
+                            (unsigned long)config.motionTimeoutSecond;
+
+    if (seconds < 5)
+    {
+        config.motionTimeoutHour = 0;
+        config.motionTimeoutMinute = 0;
+        config.motionTimeoutSecond = 5;
+    }
+    else if (seconds > 43200) // 12 hours = 43200 seconds
+    {
+        config.motionTimeoutHour = 12;
+        config.motionTimeoutMinute = 0;
+        config.motionTimeoutSecond = 0;
+    }
+
+    calculateMotionTimeoutMs(config);
+}
 
 static void putUCharIfChanged(Preferences &prefs, const char* key, uint8_t val)
 {
@@ -186,6 +216,16 @@ void saveRoomLdrEnabled(bool enabled)
     prefs.end();
 }
 
+void saveRoomMotionTimeout(const RoomConfig &config)
+{
+    Preferences prefs;
+    prefs.begin("automation", false);
+    putUCharIfChanged(prefs, "b1_motion_h", config.motionTimeoutHour);
+    putUCharIfChanged(prefs, "b1_motion_m", config.motionTimeoutMinute);
+    putUCharIfChanged(prefs, "b1_motion_s", config.motionTimeoutSecond);
+    prefs.end();
+}
+
 void loadConfiguration()
 {
     Preferences prefs;
@@ -237,6 +277,41 @@ void loadConfiguration()
         putUCharIfChanged(prefs, "b1_ldr_en", 1);
     }
 
+    // Load Motion Timeout configuration
+    uint8_t mh = 0, mm = 5, ms = 0; // Default 00:05:00
+    bool motionTimeoutMissing = false;
+
+    if (prefs.isKey("b1_motion_h")) mh = prefs.getUChar("b1_motion_h");
+    else { mh = 0; motionTimeoutMissing = true; }
+
+    if (prefs.isKey("b1_motion_m")) mm = prefs.getUChar("b1_motion_m");
+    else { mm = 5; motionTimeoutMissing = true; }
+
+    if (prefs.isKey("b1_motion_s")) ms = prefs.getUChar("b1_motion_s");
+    else { ms = 0; motionTimeoutMissing = true; }
+
+    bedroom1Config.motionTimeoutHour = mh;
+    bedroom1Config.motionTimeoutMinute = mm;
+    bedroom1Config.motionTimeoutSecond = ms;
+
+    unsigned long rawSec = (unsigned long)mh * 3600UL + (unsigned long)mm * 60UL + (unsigned long)ms;
+    if (rawSec < 5 || rawSec > 43200 || mh > 23 || mm > 59 || ms > 59)
+    {
+        clampRoomMotionTimeout(bedroom1Config);
+        motionTimeoutMissing = true;
+    }
+    else
+    {
+        bedroom1Config.motionTimeoutMs = rawSec * 1000UL;
+    }
+
+    if (motionTimeoutMissing)
+    {
+        putUCharIfChanged(prefs, "b1_motion_h", bedroom1Config.motionTimeoutHour);
+        putUCharIfChanged(prefs, "b1_motion_m", bedroom1Config.motionTimeoutMinute);
+        putUCharIfChanged(prefs, "b1_motion_s", bedroom1Config.motionTimeoutSecond);
+    }
+
     prefs.end();
 }
 
@@ -262,6 +337,13 @@ void printRestoredConfiguration()
     Serial.printf("Socket   : %s\n", getModeName(bedroom1Socket.mode));
     Serial.printf("AC       : %s\n", getModeName(bedroom1AC.mode));
     Serial.printf("LDR Enable: %s\n", bedroom1LdrEnabled ? "ON" : "OFF");
+    Serial.println("Bedroom1");
+    Serial.println("Motion Timeout");
+    Serial.printf("%02u:%02u:%02u\n",
+                  bedroom1Config.motionTimeoutHour,
+                  bedroom1Config.motionTimeoutMinute,
+                  bedroom1Config.motionTimeoutSecond);
+    Serial.printf("(%lu ms)\n", bedroom1Config.motionTimeoutMs);
     Serial.println("Schedules (AUTO / SCHEDULE):");
 
     auto printDualSchedule = [](const char* name, const DeviceConfig &device) {

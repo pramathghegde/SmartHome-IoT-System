@@ -11,7 +11,6 @@
 
 // Motion hold time after last Motion HIGH
 // Testing : 10000  Production: 300000
-#define MOTION_TIMEOUT       60000
 
 // LDR hysteresis thresholds
 #define DARK_THRESHOLD_LOW   1100

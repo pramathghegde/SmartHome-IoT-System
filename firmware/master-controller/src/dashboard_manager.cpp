@@ -117,6 +117,22 @@ static bool auditedVirtualWriteSchedule(uint8_t pin, uint8_t startHour, uint8_t 
     return true;
 }
 
+static bool auditedVirtualWriteDuration(uint8_t pin, uint8_t hour, uint8_t minute, uint8_t second)
+{
+    if (!Blynk.connected())
+    {
+        Serial.print("[BLYNK] Skipped V");
+        Serial.print(pin);
+        Serial.println(" write; not connected");
+        return false;
+    }
+
+    uint32_t startSec = (uint32_t)hour * 3600 + (uint32_t)minute * 60 + second;
+    Blynk.virtualWrite(pin, startSec, -1, "Asia/Kolkata");
+    countBlynkMessage(false, false);
+    return true;
+}
+
 static void appendLine(String& buffer, const String& line = "")
 {
     buffer += line;
@@ -176,6 +192,16 @@ static BlynkTimerCache blynkSocketCache    = {0xFF, 0xFF, 0xFF, 0xFF, false, fal
 static BlynkTimerCache blynkACCache        = {0xFF, 0xFF, 0xFF, 0xFF, false, false, 0x00, ""};
 
 static uint8_t blynkLdrEnableCache      = 0xFF;
+
+struct BlynkMotionTimeoutCache
+{
+    uint8_t hour;
+    uint8_t minute;
+    uint8_t second;
+    bool hasStart;
+};
+
+static BlynkMotionTimeoutCache blynkMotionTimeoutCache = {0xFF, 0xFF, 0xFF, false};
 
 static bool blynkCacheInitialized = false;
 
@@ -259,6 +285,31 @@ static bool writeLedIfChanged(uint8_t pin, bool currentVal, bool &cachedVal)
         if (auditedVirtualWrite(pin, currentVal ? 255 : 0))
         {
             cachedVal = currentVal;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool writeMotionTimeoutIfChanged(uint8_t pin, uint8_t hour, uint8_t minute, uint8_t second, BlynkMotionTimeoutCache &cache)
+{
+    bool changed = !blynkCacheInitialized ||
+                   hour != cache.hour ||
+                   minute != cache.minute ||
+                   second != cache.second ||
+                   !cache.hasStart;
+
+    if (changed)
+    {
+        timerSyncInProgress = true;
+        bool success = auditedVirtualWriteDuration(pin, hour, minute, second);
+        timerSyncInProgress = false;
+        if (success)
+        {
+            cache.hour = hour;
+            cache.minute = minute;
+            cache.second = second;
+            cache.hasStart = true;
             return true;
         }
     }
@@ -355,7 +406,13 @@ static void sendStatusToTerminal()
     appendLine(status);
     appendLine(status, "--- ROOM STATUS ----------");
     appendLine(status, String("  Bedroom1 : ") + (bedroom1.online ? "ONLINE " : "OFFLINE"));
-    appendLine(status, String("  Motion  : ") + (bedroom1.motionDetected ? "DETECTED" : "CLEAR   "));
+    appendLine(status, String("  Motion   : ") + (bedroom1.motionDetected ? "DETECTED" : "CLEAR   "));
+    char toBuf[40];
+    snprintf(toBuf, sizeof(toBuf), "  Motion TO: %02u:%02u:%02u",
+             bedroom1Config.motionTimeoutHour,
+             bedroom1Config.motionTimeoutMinute,
+             bedroom1Config.motionTimeoutSecond);
+    appendLine(status, toBuf);
     appendLine(status, "  Bedroom2 : -------");    // Future node
     appendLine(status, "  Hall     : -------");    // Future node
     appendLine(status, "  Kitchen  : -------");    // Future node
@@ -624,6 +681,50 @@ BLYNK_WRITE_PIN(VPIN_B1_LDR_ENABLE)
     blynkLdrEnableCache = param.asInt();
 }
 
+BLYNK_WRITE_PIN(VPIN_B1_MOTION_TIMEOUT)
+{
+    if (timerSyncInProgress) return;
+    TimeInputParam t(param);
+
+    uint8_t h = t.hasStartTime() ? t.getStartHour() : 0;
+    uint8_t m = t.hasStartTime() ? t.getStartMinute() : 0;
+    uint8_t s = t.hasStartTime() ? t.getStartSecond() : 0;
+
+    RoomConfig tempConfig = { h, m, s, 0 };
+    clampRoomMotionTimeout(tempConfig);
+
+    bool changed = (tempConfig.motionTimeoutHour != bedroom1Config.motionTimeoutHour ||
+                    tempConfig.motionTimeoutMinute != bedroom1Config.motionTimeoutMinute ||
+                    tempConfig.motionTimeoutSecond != bedroom1Config.motionTimeoutSecond);
+
+    if (changed)
+    {
+        bedroom1Config = tempConfig;
+        saveRoomMotionTimeout(bedroom1Config);
+        Serial.printf("[BLYNK] Motion Timeout updated to %02u:%02u:%02u (%lu ms)\n", 
+                      bedroom1Config.motionTimeoutHour, 
+                      bedroom1Config.motionTimeoutMinute, 
+                      bedroom1Config.motionTimeoutSecond, 
+                      bedroom1Config.motionTimeoutMs);
+
+        if (tempConfig.motionTimeoutHour != h || 
+            tempConfig.motionTimeoutMinute != m || 
+            tempConfig.motionTimeoutSecond != s)
+        {
+            writeMotionTimeoutIfChanged(VPIN_B1_MOTION_TIMEOUT_NUM, 
+                                        bedroom1Config.motionTimeoutHour, 
+                                        bedroom1Config.motionTimeoutMinute, 
+                                        bedroom1Config.motionTimeoutSecond, 
+                                        blynkMotionTimeoutCache);
+        }
+    }
+
+    blynkMotionTimeoutCache.hour = bedroom1Config.motionTimeoutHour;
+    blynkMotionTimeoutCache.minute = bedroom1Config.motionTimeoutMinute;
+    blynkMotionTimeoutCache.second = bedroom1Config.motionTimeoutSecond;
+    blynkMotionTimeoutCache.hasStart = true;
+}
+
 void updateAllBlynkWidgets()
 {
     Serial.println("[BLYNK] Updating all widgets to match current configuration (cache filtered)...");
@@ -637,6 +738,9 @@ void updateAllBlynkWidgets()
 
     // 2. LDR Enable Switch Widget
     writeLdrEnableIfChanged(VPIN_B1_LDR_ENABLE_NUM, bedroom1LdrEnabled, blynkLdrEnableCache);
+
+    // 2b. Motion Timeout Duration Widget
+    writeMotionTimeoutIfChanged(VPIN_B1_MOTION_TIMEOUT_NUM, bedroom1Config.motionTimeoutHour, bedroom1Config.motionTimeoutMinute, bedroom1Config.motionTimeoutSecond, blynkMotionTimeoutCache);
 
     // 3. LED widgets: V150-V154
     writeLedIfChanged(150, bedroom1Fan.currentState, prevFanState);
