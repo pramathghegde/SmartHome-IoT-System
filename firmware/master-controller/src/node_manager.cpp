@@ -10,15 +10,31 @@
 
 static bool offlinePrinted = false;
 
+const char* getNodeName(uint8_t nodeID)
+{
+    switch (nodeID)
+    {
+        case MASTER_NODE:     return "MASTER";
+        case BEDROOM1_NODE:   return "BEDROOM1";
+        case BEDROOM2_NODE:   return "BEDROOM2";
+        case HALL_NODE:       return "HALL";
+        case KITCHEN_NODE:    return "KITCHEN";
+        case OUTDOOR_NODE:    return "OUTDOOR";
+        case TANK_NODE:       return "TANK";
+        case DOORLOCK_NODE:   return "DOORLOCK";
+        default:              return "UNKNOWN";
+    }
+}
+
 void updateHeartbeat(uint8_t nodeID)
 {
     if(nodeID == BEDROOM1_NODE)
     {
         if(!bedroom1.online)
         {
-            Serial.println(
-                "[NODE] BEDROOM1 ONLINE"
-            );
+            Serial.print("[NODE] ");
+            Serial.print(getNodeName(nodeID));
+            Serial.println(" ONLINE");
             bedroom1.syncPending = true;
         }
 
@@ -45,9 +61,9 @@ void checkNodeStatus()
 
         if(!offlinePrinted)
         {
-            Serial.println(
-                "[NODE] BEDROOM1 OFFLINE"
-            );
+            Serial.print("[NODE] ");
+            Serial.print(getNodeName(BEDROOM1_NODE));
+            Serial.println(" OFFLINE");
 
             offlinePrinted = true;
         }

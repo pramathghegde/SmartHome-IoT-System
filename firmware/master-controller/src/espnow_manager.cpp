@@ -222,11 +222,6 @@ void processIncomingPackets()
 
     while (xQueueReceive(rxQueue, &packet, 0) == pdTRUE)
     {
-        Serial.print("[QUEUE POP] Master cmd=");
-        Serial.print(packet.command);
-        Serial.print(" waiting=");
-        Serial.println(uxQueueMessagesWaiting(rxQueue));
-
         switch(packet.command)
         {
             case CMD_ACK:
@@ -243,7 +238,7 @@ void processIncomingPackets()
 
             case CMD_HEARTBEAT:
                 Serial.print("[HEARTBEAT] Node=");
-                Serial.print(packet.senderNode);
+                Serial.print(getNodeName(packet.senderNode));
                 Serial.print(" Motion=");
                 Serial.print(packet.motionDetected);
                 Serial.print(" Bright=");
@@ -263,7 +258,9 @@ void processIncomingPackets()
                         )
                     )
                     {
-                        Serial.println("[NODE] BEDROOM1 REBOOT DETECTED - forcing state sync");
+                        Serial.print("[NODE] ");
+                        Serial.print(getNodeName(packet.senderNode));
+                        Serial.println(" REBOOT DETECTED - forcing state sync");
                         bedroom1.syncPending = true;
                     }
 
