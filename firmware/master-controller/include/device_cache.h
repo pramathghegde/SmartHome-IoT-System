@@ -32,6 +32,7 @@ extern DeviceConfig bedroom1Bulb;
 extern DeviceConfig bedroom1Socket;
 extern DeviceConfig bedroom1AC;
 extern bool bedroom1LdrEnabled;
+extern bool livingroomLdrEnabled;
 
 extern DeviceConfig livingroomTube1;
 extern DeviceConfig livingroomTube2;

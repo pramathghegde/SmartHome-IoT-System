@@ -20,6 +20,7 @@ DeviceConfig livingroomOutsideBulb;
 DeviceConfig livingroomExtra1;
 DeviceConfig livingroomExtra2;
 RoomConfig livingroomConfig;
+bool livingroomLdrEnabled = true;
 
 
 static void calculateMotionTimeoutMs(RoomConfig &config)
@@ -237,6 +238,10 @@ void saveRoomLdrEnabled(uint8_t nodeID, bool enabled)
     {
         putUCharIfChanged(prefs, "b1_ldr_en", enabled ? 1 : 0);
     }
+    else if (nodeID == LIVINGROOM_NODE)
+    {
+        putUCharIfChanged(prefs, "lr_ldr_en", enabled ? 1 : 0);
+    }
     prefs.end();
 }
 
@@ -327,6 +332,33 @@ void loadConfiguration()
     if (needsWrite)
     {
         putUCharIfChanged(prefs, "b1_ldr_en", 1);
+    }
+
+    // Load LDR Enable configuration (LivingRoom)
+    bool lrLdrVal = true;
+    bool lrNeedsWrite = false;
+    if (prefs.isKey("lr_ldr_en"))
+    {
+        uint8_t val = prefs.getUChar("lr_ldr_en");
+        if (val == 0 || val == 1)
+        {
+            lrLdrVal = (val == 1);
+        }
+        else
+        {
+            lrLdrVal = true;
+            lrNeedsWrite = true;
+        }
+    }
+    else
+    {
+        lrLdrVal = true;
+        lrNeedsWrite = true;
+    }
+    livingroomLdrEnabled = lrLdrVal;
+    if (lrNeedsWrite)
+    {
+        putUCharIfChanged(prefs, "lr_ldr_en", 1);
     }
 
     // Load Motion Timeout configuration (Bedroom1)
@@ -439,6 +471,7 @@ void printRestoredConfiguration()
     Serial.printf("  Bulb     : %s\n", getModeName(livingroomOutsideBulb.mode));
     Serial.printf("  Extra 1  : %s\n", getModeName(livingroomExtra1.mode));
     Serial.printf("  Extra 2  : %s\n", getModeName(livingroomExtra2.mode));
+    Serial.printf("  LDR Enable: %s\n", livingroomLdrEnabled ? "ON" : "OFF");
     Serial.printf("  Motion Timeout: %02u:%02u:%02u (%lu ms)\n",
                   livingroomConfig.motionTimeoutHour,
                   livingroomConfig.motionTimeoutMinute,

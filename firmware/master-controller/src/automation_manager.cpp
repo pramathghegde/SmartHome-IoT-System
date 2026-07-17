@@ -158,7 +158,7 @@ static bool getAutoState(uint8_t nodeID, uint8_t deviceID)
             case 1: // LED Tube Light 1
             case 2: // LED Tube Light 2
             case 5: // General Purpose Socket
-                if (!bedroom1LdrEnabled)
+                if (!livingroomLdrEnabled)
                 {
                     return livingroom.motionDetected;
                 }
@@ -173,7 +173,7 @@ static bool getAutoState(uint8_t nodeID, uint8_t deviceID)
                 return true;
 
             case 6: // Outside LED Bulb
-                if (!bedroom1LdrEnabled)
+                if (!livingroomLdrEnabled)
                 {
                     return true;
                 }
