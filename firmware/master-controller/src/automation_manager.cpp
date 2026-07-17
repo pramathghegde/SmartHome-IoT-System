@@ -92,31 +92,56 @@ static void updateMotionTimeout()
     }
 }
 
-// ---------------------------------------------------------------
-// LDR hysteresis - master owns this completely
-// ---------------------------------------------------------------
-
-static bool currentDarkStateB1 = false;
-
-static bool isItDark(uint8_t nodeID)
+static bool updateDarkState(
+    bool &darkState,
+    uint16_t brightness,
+    uint16_t enterThreshold,
+    uint16_t exitThreshold,
+    const char* roomName
+)
 {
-    if (currentDarkStateB1)
+    if (!darkState)
     {
-        if (bedroom1.brightness > DARK_THRESHOLD_HIGH)
+        if (brightness <= enterThreshold)
         {
-            currentDarkStateB1 = false;
-            Serial.println("[LDR] GLOBAL DAY (from B1 LDR)");
+            darkState = true;
+            Serial.println("[MASTER][LDR]");
+            Serial.printf("Room : %s\n", roomName);
+            Serial.printf("Brightness : %u\n", brightness);
+            Serial.printf("Enter Threshold : %u\n", enterThreshold);
+            Serial.printf("Exit Threshold : %u\n", exitThreshold);
+            Serial.println("State : BRIGHT -> DARK");
+            Serial.println("--------------------------------");
         }
     }
     else
     {
-        if (bedroom1.brightness < DARK_THRESHOLD_LOW)
+        if (brightness >= exitThreshold)
         {
-            currentDarkStateB1 = true;
-            Serial.println("[LDR] GLOBAL NIGHT (from B1 LDR)");
+            darkState = false;
+            Serial.println("[MASTER][LDR]");
+            Serial.printf("Room : %s\n", roomName);
+            Serial.printf("Brightness : %u\n", brightness);
+            Serial.printf("Enter Threshold : %u\n", enterThreshold);
+            Serial.printf("Exit Threshold : %u\n", exitThreshold);
+            Serial.println("State : DARK -> BRIGHT");
+            Serial.println("--------------------------------");
         }
     }
-    return currentDarkStateB1;
+    return darkState;
+}
+
+static bool isItDark(uint8_t nodeID)
+{
+    if (nodeID == BEDROOM1_NODE)
+    {
+        return bedroom1.darkState;
+    }
+    else if (nodeID == LIVINGROOM_NODE)
+    {
+        return livingroom.darkState;
+    }
+    return false;
 }
 
 
@@ -428,6 +453,10 @@ void confirmDeviceCommand(uint8_t nodeID, uint8_t deviceID, bool state)
 
 void runAutomation()
 {
+    // Update persistent LDR darkStates using hysteresis helper
+    updateDarkState(bedroom1.darkState, bedroom1.brightness, BEDROOM1_DARK_ENTER_THRESHOLD, BEDROOM1_DARK_EXIT_THRESHOLD, "Bedroom1");
+    updateDarkState(livingroom.darkState, bedroom1.brightness, LIVINGROOM_DARK_ENTER_THRESHOLD, LIVINGROOM_DARK_EXIT_THRESHOLD, "LivingRoom");
+
     updateMotionTimeout();
 
     // Bedroom1 automation

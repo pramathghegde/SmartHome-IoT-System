@@ -12,6 +12,9 @@
 // Motion hold time after last Motion HIGH
 // Testing : 10000  Production: 300000
 
-// LDR hysteresis thresholds
-#define DARK_THRESHOLD_LOW   3100
-#define DARK_THRESHOLD_HIGH  3300
+// Room-specific LDR hysteresis thresholds
+constexpr uint16_t BEDROOM1_DARK_ENTER_THRESHOLD    = 3100;
+constexpr uint16_t BEDROOM1_DARK_EXIT_THRESHOLD     = 3300;
+
+constexpr uint16_t LIVINGROOM_DARK_ENTER_THRESHOLD  = 2900;
+constexpr uint16_t LIVINGROOM_DARK_EXIT_THRESHOLD   = 3500;

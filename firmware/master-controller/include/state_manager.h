@@ -8,6 +8,7 @@ struct RoomState
     bool syncPending;
 
     bool motionDetected;
+    bool darkState;
 
     int brightness;
 

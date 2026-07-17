@@ -5,6 +5,7 @@ RoomState bedroom1 =
     false, // online
     false, // syncPending
     false, // motionDetected
+    false, // darkState
     0,     // brightness
     0,     // temperature
     0,     // humidity
@@ -18,6 +19,7 @@ RoomState livingroom =
     false, // online
     false, // syncPending
     false, // motionDetected
+    false, // darkState
     0,     // brightness
     0,     // temperature
     0,     // humidity

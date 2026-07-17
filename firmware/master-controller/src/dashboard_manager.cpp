@@ -438,8 +438,7 @@ static void sendStatusToTerminal()
 
     // Day/Night from B1 LDR (Global)
     const char* globalLightStatus =
-        (bedroom1.brightness < DARK_THRESHOLD_LOW) ?
-        "NIGHT" : "DAY  ";
+        bedroom1.darkState ? "NIGHT" : "DAY  ";
 
     String status;
     status.reserve(1200);
