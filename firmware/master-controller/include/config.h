@@ -13,5 +13,5 @@
 // Testing : 10000  Production: 300000
 
 // LDR hysteresis thresholds
-#define DARK_THRESHOLD_LOW   1100
-#define DARK_THRESHOLD_HIGH  1300
+#define DARK_THRESHOLD_LOW   3100
+#define DARK_THRESHOLD_HIGH  3300

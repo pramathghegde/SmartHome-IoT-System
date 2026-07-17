@@ -8,6 +8,7 @@
 #include "node_ids.h"
 #include "modes.h"
 #include "config.h"
+#include "node_manager.h"
 
 #include <Arduino.h>
 
@@ -27,27 +28,46 @@ struct PendingCmd
     uint32_t lastSendAt;
 };
 
-// Index 0-4 maps to Device IDs 1-5
-static PendingCmd pending[5] = {};
+// Index 0: BEDROOM1, Index 1: LIVINGROOM
+static PendingCmd pending[2][8] = {};
+
+static int getRoomIndex(uint8_t nodeID)
+{
+    if (nodeID == BEDROOM1_NODE) return 0;
+    if (nodeID == LIVINGROOM_NODE) return 1;
+    return -1;
+}
 
 #define MAX_RETRIES 10
 #define COMMAND_RETRY_INTERVAL 150
 
 // ---------------------------------------------------------------
 // Motion timeout - master owns this completely
-// Receives raw Motion Sensor state from bedroom1, applies duration logic here
+// Receives raw Motion Sensor state from rooms, applies duration logic here
 // ---------------------------------------------------------------
 
-static unsigned long lastMotionTime = 0;
+static unsigned long lastMotionTimeB1 = 0;
+static unsigned long lastMotionTimeLR = 0;
 
-void recordMotionEvent()
+void recordMotionEvent(uint8_t nodeID)
 {
-    lastMotionTime = millis();
-
-    if (!bedroom1.motionDetected)
+    if (nodeID == BEDROOM1_NODE)
     {
-        bedroom1.motionDetected = true;
-        Serial.println("[MOTION] Active");
+        lastMotionTimeB1 = millis();
+        if (!bedroom1.motionDetected)
+        {
+            bedroom1.motionDetected = true;
+            Serial.println("[MOTION] B1 Active");
+        }
+    }
+    else if (nodeID == LIVINGROOM_NODE)
+    {
+        lastMotionTimeLR = millis();
+        if (!livingroom.motionDetected)
+        {
+            livingroom.motionDetected = true;
+            Serial.println("[MOTION] LR Active");
+        }
     }
 }
 
@@ -55,11 +75,20 @@ static void updateMotionTimeout()
 {
     if (
         bedroom1.motionDetected &&
-        (millis() - lastMotionTime) >= bedroom1Config.motionTimeoutMs
+        (millis() - lastMotionTimeB1) >= bedroom1Config.motionTimeoutMs
     )
     {
         bedroom1.motionDetected = false;
-        Serial.println("[MOTION] Timeout");
+        Serial.println("[MOTION] B1 Timeout");
+    }
+
+    if (
+        livingroom.motionDetected &&
+        (millis() - lastMotionTimeLR) >= livingroomConfig.motionTimeoutMs
+    )
+    {
+        livingroom.motionDetected = false;
+        Serial.println("[MOTION] LR Timeout");
     }
 }
 
@@ -67,29 +96,29 @@ static void updateMotionTimeout()
 // LDR hysteresis - master owns this completely
 // ---------------------------------------------------------------
 
-static bool currentDarkState = false;
+static bool currentDarkStateB1 = false;
 
-static bool isItDark()
+static bool isItDark(uint8_t nodeID)
 {
-    if (currentDarkState)
+    if (currentDarkStateB1)
     {
         if (bedroom1.brightness > DARK_THRESHOLD_HIGH)
         {
-            currentDarkState = false;
-            Serial.println("[LDR] DAY");
+            currentDarkStateB1 = false;
+            Serial.println("[LDR] GLOBAL DAY (from B1 LDR)");
         }
     }
     else
     {
         if (bedroom1.brightness < DARK_THRESHOLD_LOW)
         {
-            currentDarkState = true;
-            Serial.println("[LDR] NIGHT");
+            currentDarkStateB1 = true;
+            Serial.println("[LDR] GLOBAL NIGHT (from B1 LDR)");
         }
     }
-
-    return currentDarkState;
+    return currentDarkStateB1;
 }
+
 
 // ---------------------------------------------------------------
 // getAutoState() - per device type logic
@@ -97,42 +126,82 @@ static bool isItDark()
 // Non-lighting (fan, socket, AC): motion only
 // ---------------------------------------------------------------
 
-static bool getAutoState(uint8_t deviceID)
+static bool getAutoState(uint8_t nodeID, uint8_t deviceID)
 {
-    bool dark = isItDark();
+    bool dark = isItDark(nodeID);
 
-    switch(deviceID)
+    if (nodeID == BEDROOM1_NODE)
     {
-        case TUBELIGHT_DEVICE:
-        case BULB_DEVICE:
-            if (!bedroom1LdrEnabled)
-            {
+        switch(deviceID)
+        {
+            case TUBELIGHT_DEVICE:
+            case BULB_DEVICE:
+                if (!bedroom1LdrEnabled)
+                {
+                    return bedroom1.motionDetected;
+                }
+                return (bedroom1.motionDetected && dark);
+
+            case FAN_DEVICE:
+            case SOCKET_DEVICE:
+            case AC_DEVICE:
                 return bedroom1.motionDetected;
-            }
-            return (bedroom1.motionDetected && dark);
 
-        case FAN_DEVICE:
-        case SOCKET_DEVICE:
-        case AC_DEVICE:
-            return bedroom1.motionDetected;
-
-        default:
-            return false;
+            default:
+                return false;
+        }
     }
+    else if (nodeID == LIVINGROOM_NODE)
+    {
+        switch(deviceID)
+        {
+            case 1: // LED Tube Light 1
+            case 2: // LED Tube Light 2
+            case 5: // General Purpose Socket
+                if (!bedroom1LdrEnabled)
+                {
+                    return livingroom.motionDetected;
+                }
+                return (livingroom.motionDetected && dark);
+
+            case 3: // Ceiling Fan
+            case 7: // Extra Socket 1
+            case 8: // Extra Socket 2
+                return livingroom.motionDetected;
+
+            case 4: // E-Bike Charging
+                return true;
+
+            case 6: // Outside LED Bulb
+                if (!bedroom1LdrEnabled)
+                {
+                    return true;
+                }
+                return dark;
+
+            default:
+                return false;
+        }
+    }
+    return false;
 }
 
 // ---------------------------------------------------------------
 // processDevice()
 // Non-blocking reliable delivery:
-// keep retrying until Bedroom1 ACKs after executing the relay command.
+// keep retrying until Node ACKs after executing the relay command.
 // currentState updates only on execution ACK, never on local send queueing.
 // ---------------------------------------------------------------
 
 static void processDevice(
+    uint8_t nodeID,
     DeviceConfig &device,
     uint8_t deviceID
 )
 {
+    int roomIdx = getRoomIndex(nodeID);
+    if (roomIdx < 0) return;
+
     uint8_t idx = deviceID - 1;
     uint32_t now = millis();
 
@@ -142,92 +211,104 @@ static void processDevice(
     {
         case MODE_OFF:       desiredState = false;                                                    break;
         case MODE_ON:        desiredState = true;                                                     break;
-        case MODE_AUTO:      desiredState = isAutoScheduleActive(device) ? getAutoState(deviceID) : false; break;
+        case MODE_AUTO:      desiredState = isAutoScheduleActive(device) ? getAutoState(nodeID, deviceID) : false; break;
         case MODE_SCHEDULED: desiredState = isSchedScheduleActive(device);                            break;
     }
 
     // No pending command: check if one is needed
-    if (!pending[idx].active)
+    if (!pending[roomIdx][idx].active)
     {
         if (desiredState == device.currentState)
         {
             return; // Already correct
         }
 
-        pending[idx].active      = true;
-        pending[idx].targetState = desiredState;
-        pending[idx].retries     = 0;
-        pending[idx].awaitingAck = false;
-        pending[idx].createdAt   = now;
-        pending[idx].lastSendAt  = 0;
+        pending[roomIdx][idx].active      = true;
+        pending[roomIdx][idx].targetState = desiredState;
+        pending[roomIdx][idx].retries     = 0;
+        pending[roomIdx][idx].awaitingAck = false;
+        pending[roomIdx][idx].createdAt   = now;
+        pending[roomIdx][idx].lastSendAt  = 0;
 
-        Serial.print("[COMMAND CREATED] Device=");
+        Serial.print("[COMMAND CREATED] Node=");
+        Serial.print(getNodeName(nodeID));
+        Serial.print(" Device=");
         Serial.print(deviceID);
         Serial.print(" State=");
         Serial.println(desiredState ? "ON" : "OFF");
-        Serial.print("[QUEUE PUSH] Master pending Device=");
+        Serial.print("[QUEUE PUSH] Master pending Node=");
+        Serial.print(getNodeName(nodeID));
+        Serial.print(" Device=");
         Serial.print(deviceID);
         Serial.print(" State=");
         Serial.println(desiredState ? "ON" : "OFF");
     }
-    else if (desiredState != pending[idx].targetState)
+    else if (desiredState != pending[roomIdx][idx].targetState)
     {
-        pending[idx].targetState = desiredState;
-        pending[idx].retries     = 0;
-        pending[idx].awaitingAck = false;
-        pending[idx].createdAt   = now;
-        pending[idx].lastSendAt  = 0;
+        pending[roomIdx][idx].targetState = desiredState;
+        pending[roomIdx][idx].retries     = 0;
+        pending[roomIdx][idx].awaitingAck = false;
+        pending[roomIdx][idx].createdAt   = now;
+        pending[roomIdx][idx].lastSendAt  = 0;
 
-        Serial.print("[COMMAND UPDATED] Device=");
+        Serial.print("[COMMAND UPDATED] Node=");
+        Serial.print(getNodeName(nodeID));
+        Serial.print(" Device=");
         Serial.print(deviceID);
         Serial.print(" State=");
         Serial.println(desiredState ? "ON" : "OFF");
-        Serial.print("[QUEUE PUSH] Master pending Device=");
+        Serial.print("[QUEUE PUSH] Master pending Node=");
+        Serial.print(getNodeName(nodeID));
+        Serial.print(" Device=");
         Serial.print(deviceID);
         Serial.print(" State=");
         Serial.println(desiredState ? "ON" : "OFF");
     }
 
     if (
-        pending[idx].awaitingAck &&
-        (now - pending[idx].lastSendAt) < COMMAND_RETRY_INTERVAL
+        pending[roomIdx][idx].awaitingAck &&
+        (now - pending[roomIdx][idx].lastSendAt) < COMMAND_RETRY_INTERVAL
     )
     {
         return;
     }
 
     // Give up after MAX_RETRIES
-    if (pending[idx].retries >= MAX_RETRIES)
+    if (pending[roomIdx][idx].retries >= MAX_RETRIES)
     {
-        Serial.print("[AUTOMATION] Device=");
+        Serial.print("[AUTOMATION] Node=");
+        Serial.print(getNodeName(nodeID));
+        Serial.print(" Device=");
         Serial.print(deviceID);
         Serial.println(" gave up after max retries");
 
-        pending[idx].active  = false;
-        pending[idx].retries = 0;
+        pending[roomIdx][idx].active  = false;
+        pending[roomIdx][idx].retries = 0;
         return;
     }
 
-    pending[idx].retries++;
-    pending[idx].awaitingAck = true;
-    pending[idx].lastSendAt  = now;
+    pending[roomIdx][idx].retries++;
+    pending[roomIdx][idx].awaitingAck = true;
+    pending[roomIdx][idx].lastSendAt  = now;
 
-    Serial.print("[QUEUE POP] Master pending Device=");
+    Serial.print("[QUEUE POP] Master pending Node=");
+    Serial.print(getNodeName(nodeID));
+    Serial.print(" Device=");
     Serial.print(deviceID);
     Serial.print(" State=");
-    Serial.print(pending[idx].targetState ? "ON" : "OFF");
+    Serial.print(pending[roomIdx][idx].targetState ? "ON" : "OFF");
     Serial.print(" Retry=");
-    Serial.println(pending[idx].retries);
+    Serial.println(pending[roomIdx][idx].retries);
 
     bool queued = sendDeviceCommand(
-        BEDROOM1_NODE,
+        nodeID,
         deviceID,
-        pending[idx].targetState
+        pending[roomIdx][idx].targetState
     );
 
     if (!queued)
     {
-        pending[idx].awaitingAck = false;
+        pending[roomIdx][idx].awaitingAck = false;
         return;
     }
 }
@@ -237,10 +318,14 @@ static void processDevice(
 // ---------------------------------------------------------------
 
 static void forceDeviceSync(
+    uint8_t nodeID,
     DeviceConfig &device,
     uint8_t deviceID
 )
 {
+    int roomIdx = getRoomIndex(nodeID);
+    if (roomIdx < 0) return;
+
     uint8_t idx = deviceID - 1;
 
     bool desiredState = false;
@@ -249,30 +334,39 @@ static void forceDeviceSync(
     {
         case MODE_OFF:       desiredState = false;                                                    break;
         case MODE_ON:        desiredState = true;                                                     break;
-        case MODE_AUTO:      desiredState = isAutoScheduleActive(device) ? getAutoState(deviceID) : false; break;
+        case MODE_AUTO:      desiredState = isAutoScheduleActive(device) ? getAutoState(nodeID, deviceID) : false; break;
         case MODE_SCHEDULED: desiredState = isSchedScheduleActive(device);                            break;
     }
 
-    pending[idx].active      = true;
-    pending[idx].targetState = desiredState;
-    pending[idx].retries     = 0;
-    pending[idx].awaitingAck = false;
-    pending[idx].createdAt   = millis();
-    pending[idx].lastSendAt  = 0;
+    pending[roomIdx][idx].active      = true;
+    pending[roomIdx][idx].targetState = desiredState;
+    pending[roomIdx][idx].retries     = 0;
+    pending[roomIdx][idx].awaitingAck = false;
+    pending[roomIdx][idx].createdAt   = millis();
+    pending[roomIdx][idx].lastSendAt  = 0;
 }
 
-void confirmDeviceCommand(uint8_t deviceID, bool state)
+void confirmDeviceCommand(uint8_t nodeID, uint8_t deviceID, bool state)
 {
-    if (deviceID < FAN_DEVICE || deviceID > AC_DEVICE)
+    int roomIdx = getRoomIndex(nodeID);
+    if (roomIdx < 0) return;
+
+    if (nodeID == BEDROOM1_NODE)
     {
-        return;
+        if (deviceID < 1 || deviceID > 5) return;
+    }
+    else if (nodeID == LIVINGROOM_NODE)
+    {
+        if (deviceID < 1 || deviceID > 8) return;
     }
 
     uint8_t idx = deviceID - 1;
 
-    if (!pending[idx].active || pending[idx].targetState != state)
+    if (!pending[roomIdx][idx].active || pending[roomIdx][idx].targetState != state)
     {
-        Serial.print("[ACK STALE] Device=");
+        Serial.print("[ACK STALE] Node=");
+        Serial.print(getNodeName(nodeID));
+        Serial.print(" Device=");
         Serial.print(deviceID);
         Serial.print(" State=");
         Serial.println(state ? "ON" : "OFF");
@@ -281,28 +375,51 @@ void confirmDeviceCommand(uint8_t deviceID, bool state)
 
     DeviceConfig* device = nullptr;
 
-    switch(deviceID)
+    if (nodeID == BEDROOM1_NODE)
     {
-        case FAN_DEVICE:       device = &bedroom1Fan;    break;
-        case TUBELIGHT_DEVICE: device = &bedroom1Tube;   break;
-        case BULB_DEVICE:      device = &bedroom1Bulb;   break;
-        case SOCKET_DEVICE:    device = &bedroom1Socket; break;
-        case AC_DEVICE:        device = &bedroom1AC;     break;
-        default: return;
+        switch(deviceID)
+        {
+            case FAN_DEVICE:       device = &bedroom1Fan;    break;
+            case TUBELIGHT_DEVICE: device = &bedroom1Tube;   break;
+            case BULB_DEVICE:      device = &bedroom1Bulb;   break;
+            case SOCKET_DEVICE:    device = &bedroom1Socket; break;
+            case AC_DEVICE:        device = &bedroom1AC;     break;
+            default: return;
+        }
+    }
+    else if (nodeID == LIVINGROOM_NODE)
+    {
+        switch(deviceID)
+        {
+            case 1: device = &livingroomTube1;        break;
+            case 2: device = &livingroomTube2;        break;
+            case 3: device = &livingroomFan;          break;
+            case 4: device = &livingroomEBike;        break;
+            case 5: device = &livingroomSocket;       break;
+            case 6: device = &livingroomOutsideBulb;  break;
+            case 7: device = &livingroomExtra1;       break;
+            case 8: device = &livingroomExtra2;       break;
+            default: return;
+        }
     }
 
-    device->currentState = state;
-    uint32_t age = millis() - pending[idx].createdAt;
-    pending[idx] = {};
+    if (device != nullptr)
+    {
+        device->currentState = state;
+        uint32_t age = millis() - pending[roomIdx][idx].createdAt;
+        pending[roomIdx][idx] = {};
 
-    notifyDeviceStateChange(deviceID, state);
+        notifyDeviceStateChange(nodeID, deviceID, state);
 
-    Serial.print("[COMMAND ACKED] Device=");
-    Serial.print(deviceID);
-    Serial.print(" State=");
-    Serial.print(state ? "ON" : "OFF");
-    Serial.print(" AgeMs=");
-    Serial.println(age);
+        Serial.print("[COMMAND ACKED] Node=");
+        Serial.print(getNodeName(nodeID));
+        Serial.print(" Device=");
+        Serial.print(deviceID);
+        Serial.print(" State=");
+        Serial.print(state ? "ON" : "OFF");
+        Serial.print(" AgeMs=");
+        Serial.println(age);
+    }
 }
 
 // ---------------------------------------------------------------
@@ -313,27 +430,55 @@ void runAutomation()
 {
     updateMotionTimeout();
 
-    if (!bedroom1.online)
+    // Bedroom1 automation
+    if (bedroom1.online)
     {
-        return;
+        if (bedroom1.syncPending)
+        {
+            Serial.println("[SYNC] B1 OFFLINE->ONLINE: syncing all devices");
+
+            forceDeviceSync(BEDROOM1_NODE, bedroom1Fan,    FAN_DEVICE);
+            forceDeviceSync(BEDROOM1_NODE, bedroom1Tube,   TUBELIGHT_DEVICE);
+            forceDeviceSync(BEDROOM1_NODE, bedroom1Bulb,   BULB_DEVICE);
+            forceDeviceSync(BEDROOM1_NODE, bedroom1Socket, SOCKET_DEVICE);
+            forceDeviceSync(BEDROOM1_NODE, bedroom1AC,     AC_DEVICE);
+
+            bedroom1.syncPending = false;
+        }
+
+        processDevice(BEDROOM1_NODE, bedroom1Fan,    FAN_DEVICE);
+        processDevice(BEDROOM1_NODE, bedroom1Tube,   TUBELIGHT_DEVICE);
+        processDevice(BEDROOM1_NODE, bedroom1Bulb,   BULB_DEVICE);
+        processDevice(BEDROOM1_NODE, bedroom1Socket, SOCKET_DEVICE);
+        processDevice(BEDROOM1_NODE, bedroom1AC,     AC_DEVICE);
     }
 
-    if (bedroom1.syncPending)
+    // LivingRoom automation
+    if (livingroom.online)
     {
-        Serial.println("[SYNC] OFFLINE->ONLINE: syncing all devices");
+        if (livingroom.syncPending)
+        {
+            Serial.println("[SYNC] LR OFFLINE->ONLINE: syncing all devices");
 
-        forceDeviceSync(bedroom1Fan,    FAN_DEVICE);
-        forceDeviceSync(bedroom1Tube,   TUBELIGHT_DEVICE);
-        forceDeviceSync(bedroom1Bulb,   BULB_DEVICE);
-        forceDeviceSync(bedroom1Socket, SOCKET_DEVICE);
-        forceDeviceSync(bedroom1AC,     AC_DEVICE);
+            forceDeviceSync(LIVINGROOM_NODE, livingroomTube1,       1);
+            forceDeviceSync(LIVINGROOM_NODE, livingroomTube2,       2);
+            forceDeviceSync(LIVINGROOM_NODE, livingroomFan,         3);
+            forceDeviceSync(LIVINGROOM_NODE, livingroomEBike,       4);
+            forceDeviceSync(LIVINGROOM_NODE, livingroomSocket,      5);
+            forceDeviceSync(LIVINGROOM_NODE, livingroomOutsideBulb, 6);
+            forceDeviceSync(LIVINGROOM_NODE, livingroomExtra1,      7);
+            forceDeviceSync(LIVINGROOM_NODE, livingroomExtra2,      8);
 
-        bedroom1.syncPending = false;
+            livingroom.syncPending = false;
+        }
+
+        processDevice(LIVINGROOM_NODE, livingroomTube1,       1);
+        processDevice(LIVINGROOM_NODE, livingroomTube2,       2);
+        processDevice(LIVINGROOM_NODE, livingroomFan,         3);
+        processDevice(LIVINGROOM_NODE, livingroomEBike,       4);
+        processDevice(LIVINGROOM_NODE, livingroomSocket,      5);
+        processDevice(LIVINGROOM_NODE, livingroomOutsideBulb, 6);
+        processDevice(LIVINGROOM_NODE, livingroomExtra1,      7);
+        processDevice(LIVINGROOM_NODE, livingroomExtra2,      8);
     }
-
-    processDevice(bedroom1Fan,    FAN_DEVICE);
-    processDevice(bedroom1Tube,   TUBELIGHT_DEVICE);
-    processDevice(bedroom1Bulb,   BULB_DEVICE);
-    processDevice(bedroom1Socket, SOCKET_DEVICE);
-    processDevice(bedroom1AC,     AC_DEVICE);
 }

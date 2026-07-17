@@ -176,9 +176,9 @@ void sendHeartbeat()
     txPacket.receiverNode   = MASTER_NODE;
     txPacket.command        = CMD_HEARTBEAT;
     txPacket.motionDetected = isMotionDetected();
-    txPacket.brightness     = environment.brightness;
-    txPacket.temperature    = NAN;
-    txPacket.humidity       = NAN;
+    txPacket.brightness     = -1;
+    txPacket.temperature    = environment.temperature;
+    txPacket.humidity       = environment.humidity;
     txPacket.uptime         = millis() / 1000; // seconds, overflow safe
     txPacket.bootCount      = bootCount;
 
@@ -190,8 +190,10 @@ void sendHeartbeat()
 
     Serial.print("[HB] Motion=");
     Serial.print(txPacket.motionDetected);
-    Serial.print(" Bright=");
-    Serial.print(txPacket.brightness);
+    Serial.print(" Temp=");
+    Serial.print(txPacket.temperature, 1);
+    Serial.print(" Humid=");
+    Serial.print(txPacket.humidity, 1);
     Serial.print(" Uptime=");
     Serial.print(txPacket.uptime);
     Serial.print("s Boot=");
@@ -238,24 +240,6 @@ static void sendCommandAck(uint8_t deviceID, bool state)
     Serial.print(" State=");
     Serial.print(state ? "ON" : "OFF");
     Serial.println(result == ESP_OK ? " queued" : " queue-failed");
-}
-
-void sendEnvironmentStatus()
-{
-    Packet txPacket = {};
-
-    txPacket.senderNode   = NODE_ID;
-    txPacket.receiverNode = MASTER_NODE;
-    txPacket.command      = CMD_ENVIRONMENT;
-    txPacket.brightness   = environment.brightness;
-    txPacket.temperature  = NAN;
-    txPacket.humidity     = NAN;
-
-    esp_now_send(
-        MASTER_MAC,
-        (uint8_t*)&txPacket,
-        sizeof(txPacket)
-    );
 }
 
 void processIncomingPackets()
@@ -306,7 +290,13 @@ void processIncomingPackets()
         Serial.print(" State=");
         Serial.println(packet.state ? "ON" : "OFF");
 
+        if (packet.command == CMD_SET_DEVICE_STATE)
+        {
+            Serial.printf("[RX CMD] Device=%d State=%s\n", packet.deviceID, packet.state ? "ON" : "OFF");
+        }
+
         applyRelayCommand(packet.deviceID, packet.state);
+        Serial.printf("[ACK TX] Device=%d State=%s\n", packet.deviceID, packet.state ? "ON" : "OFF");
         sendCommandAck(packet.deviceID, packet.state);
 
         Serial.print("[CMD] Device=");
@@ -326,7 +316,7 @@ void processIncomingPackets()
         {
             case CMD_ACK:
                 // Silent. ACK just confirms master is alive.
-                // Bedroom1 takes no action based on master presence.
+                // LivingRoom takes no action based on master presence.
                 break;
 
             case CMD_SET_MODE:

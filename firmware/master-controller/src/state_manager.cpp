@@ -12,3 +12,20 @@ RoomState bedroom1 =
     0,     // lastNodeUptime
     0      // lastBootCount
 };
+
+RoomState livingroom =
+{
+    false, // online
+    false, // syncPending
+    false, // motionDetected
+    0,     // brightness
+    0,     // temperature
+    0,     // humidity
+    0,     // lastHeartbeat
+    0,     // lastNodeUptime
+    0      // lastBootCount
+};
+
+float globalTemperature = 0.0f;
+float globalHumidity = 0.0f;
+

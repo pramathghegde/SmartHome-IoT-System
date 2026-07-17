@@ -1,6 +1,7 @@
 #include "device_cache.h"
 
 #include "modes.h"
+#include "node_ids.h"
 
 DeviceConfig bedroom1Fan;
 DeviceConfig bedroom1Tube;
@@ -9,6 +10,17 @@ DeviceConfig bedroom1Socket;
 DeviceConfig bedroom1AC;
 bool bedroom1LdrEnabled = true;
 RoomConfig bedroom1Config;
+
+DeviceConfig livingroomTube1;
+DeviceConfig livingroomTube2;
+DeviceConfig livingroomFan;
+DeviceConfig livingroomEBike;
+DeviceConfig livingroomSocket;
+DeviceConfig livingroomOutsideBulb;
+DeviceConfig livingroomExtra1;
+DeviceConfig livingroomExtra2;
+RoomConfig livingroomConfig;
+
 
 static void calculateMotionTimeoutMs(RoomConfig &config)
 {
@@ -197,6 +209,15 @@ void saveConfiguration()
     saveDeviceConfiguration(prefs, "bulb", bedroom1Bulb);
     saveDeviceConfiguration(prefs, "sock", bedroom1Socket);
     saveDeviceConfiguration(prefs, "ac",   bedroom1AC);
+
+    saveDeviceConfiguration(prefs, "lr_t1",  livingroomTube1);
+    saveDeviceConfiguration(prefs, "lr_t2",  livingroomTube2);
+    saveDeviceConfiguration(prefs, "lr_fan",  livingroomFan);
+    saveDeviceConfiguration(prefs, "lr_ebk",  livingroomEBike);
+    saveDeviceConfiguration(prefs, "lr_soc",  livingroomSocket);
+    saveDeviceConfiguration(prefs, "lr_ob",   livingroomOutsideBulb);
+    saveDeviceConfiguration(prefs, "lr_ex1",  livingroomExtra1);
+    saveDeviceConfiguration(prefs, "lr_ex2",  livingroomExtra2);
     prefs.end();
 }
 
@@ -208,23 +229,36 @@ void saveSingleDevice(const char* prefix, const DeviceConfig &device)
     prefs.end();
 }
 
-void saveRoomLdrEnabled(bool enabled)
+void saveRoomLdrEnabled(uint8_t nodeID, bool enabled)
 {
     Preferences prefs;
     prefs.begin("automation", false);
-    putUCharIfChanged(prefs, "b1_ldr_en", enabled ? 1 : 0);
+    if (nodeID == BEDROOM1_NODE)
+    {
+        putUCharIfChanged(prefs, "b1_ldr_en", enabled ? 1 : 0);
+    }
     prefs.end();
 }
 
-void saveRoomMotionTimeout(const RoomConfig &config)
+void saveRoomMotionTimeout(uint8_t nodeID, const RoomConfig &config)
 {
     Preferences prefs;
     prefs.begin("automation", false);
-    putUCharIfChanged(prefs, "b1_motion_h", config.motionTimeoutHour);
-    putUCharIfChanged(prefs, "b1_motion_m", config.motionTimeoutMinute);
-    putUCharIfChanged(prefs, "b1_motion_s", config.motionTimeoutSecond);
+    if (nodeID == BEDROOM1_NODE)
+    {
+        putUCharIfChanged(prefs, "b1_motion_h", config.motionTimeoutHour);
+        putUCharIfChanged(prefs, "b1_motion_m", config.motionTimeoutMinute);
+        putUCharIfChanged(prefs, "b1_motion_s", config.motionTimeoutSecond);
+    }
+    else if (nodeID == LIVINGROOM_NODE)
+    {
+        putUCharIfChanged(prefs, "lr_motion_h", config.motionTimeoutHour);
+        putUCharIfChanged(prefs, "lr_motion_m", config.motionTimeoutMinute);
+        putUCharIfChanged(prefs, "lr_motion_s", config.motionTimeoutSecond);
+    }
     prefs.end();
 }
+
 
 void loadConfiguration()
 {
@@ -250,7 +284,25 @@ void loadConfiguration()
     if (!sockOk) saveDeviceConfiguration(prefs, "sock", bedroom1Socket);
     if (!acOk)   saveDeviceConfiguration(prefs, "ac",   bedroom1AC);
 
-    // Load LDR Enable configuration
+    bool lr_t1Ok  = loadDeviceConfiguration(prefs, "lr_t1",  livingroomTube1,  defaultTube);
+    bool lr_t2Ok  = loadDeviceConfiguration(prefs, "lr_t2",  livingroomTube2,  defaultTube);
+    bool lr_fanOk  = loadDeviceConfiguration(prefs, "lr_fan",  livingroomFan,    defaultFan);
+    bool lr_ebkOk  = loadDeviceConfiguration(prefs, "lr_ebk",  livingroomEBike,  defaultSocket);
+    bool lr_socOk  = loadDeviceConfiguration(prefs, "lr_soc",  livingroomSocket, defaultSocket);
+    bool lr_obOk   = loadDeviceConfiguration(prefs, "lr_ob",   livingroomOutsideBulb, defaultTube);
+    bool lr_ex1Ok  = loadDeviceConfiguration(prefs, "lr_ex1",  livingroomExtra1, defaultSocket);
+    bool lr_ex2Ok  = loadDeviceConfiguration(prefs, "lr_ex2",  livingroomExtra2, defaultSocket);
+
+    if (!lr_t1Ok)  saveDeviceConfiguration(prefs, "lr_t1",  livingroomTube1);
+    if (!lr_t2Ok)  saveDeviceConfiguration(prefs, "lr_t2",  livingroomTube2);
+    if (!lr_fanOk)  saveDeviceConfiguration(prefs, "lr_fan",  livingroomFan);
+    if (!lr_ebkOk)  saveDeviceConfiguration(prefs, "lr_ebk",  livingroomEBike);
+    if (!lr_socOk)  saveDeviceConfiguration(prefs, "lr_soc",  livingroomSocket);
+    if (!lr_obOk)   saveDeviceConfiguration(prefs, "lr_ob",   livingroomOutsideBulb);
+    if (!lr_ex1Ok)  saveDeviceConfiguration(prefs, "lr_ex1",  livingroomExtra1);
+    if (!lr_ex2Ok)  saveDeviceConfiguration(prefs, "lr_ex2",  livingroomExtra2);
+
+    // Load LDR Enable configuration (Bedroom1)
     bool ldrVal = true;
     bool needsWrite = false;
     if (prefs.isKey("b1_ldr_en"))
@@ -277,7 +329,7 @@ void loadConfiguration()
         putUCharIfChanged(prefs, "b1_ldr_en", 1);
     }
 
-    // Load Motion Timeout configuration
+    // Load Motion Timeout configuration (Bedroom1)
     uint8_t mh = 0, mm = 5, ms = 0; // Default 00:05:00
     bool motionTimeoutMissing = false;
 
@@ -312,6 +364,41 @@ void loadConfiguration()
         putUCharIfChanged(prefs, "b1_motion_s", bedroom1Config.motionTimeoutSecond);
     }
 
+    // Load Motion Timeout configuration (LivingRoom)
+    uint8_t lr_mh = 0, lr_mm = 5, lr_ms = 0; // Default 00:05:00
+    bool lr_motionTimeoutMissing = false;
+
+    if (prefs.isKey("lr_motion_h")) lr_mh = prefs.getUChar("lr_motion_h");
+    else { lr_mh = 0; lr_motionTimeoutMissing = true; }
+
+    if (prefs.isKey("lr_motion_m")) lr_mm = prefs.getUChar("lr_motion_m");
+    else { lr_mm = 5; lr_motionTimeoutMissing = true; }
+
+    if (prefs.isKey("lr_motion_s")) lr_ms = prefs.getUChar("lr_motion_s");
+    else { lr_ms = 0; lr_motionTimeoutMissing = true; }
+
+    livingroomConfig.motionTimeoutHour = lr_mh;
+    livingroomConfig.motionTimeoutMinute = lr_mm;
+    livingroomConfig.motionTimeoutSecond = lr_ms;
+
+    unsigned long lr_rawSec = (unsigned long)lr_mh * 3600UL + (unsigned long)lr_mm * 60UL + (unsigned long)lr_ms;
+    if (lr_rawSec < 5 || lr_rawSec > 43200 || lr_mh > 23 || lr_mm > 59 || lr_ms > 59)
+    {
+        clampRoomMotionTimeout(livingroomConfig);
+        lr_motionTimeoutMissing = true;
+    }
+    else
+    {
+        livingroomConfig.motionTimeoutMs = lr_rawSec * 1000UL;
+    }
+
+    if (lr_motionTimeoutMissing)
+    {
+        putUCharIfChanged(prefs, "lr_motion_h", livingroomConfig.motionTimeoutHour);
+        putUCharIfChanged(prefs, "lr_motion_m", livingroomConfig.motionTimeoutMinute);
+        putUCharIfChanged(prefs, "lr_motion_s", livingroomConfig.motionTimeoutSecond);
+    }
+
     prefs.end();
 }
 
@@ -331,35 +418,59 @@ void printRestoredConfiguration()
 {
     Serial.println("=================================");
     Serial.println("RESTORED CONFIGURATION");
-    Serial.printf("Fan      : %s\n", getModeName(bedroom1Fan.mode));
-    Serial.printf("Tube     : %s\n", getModeName(bedroom1Tube.mode));
-    Serial.printf("Bulb     : %s\n", getModeName(bedroom1Bulb.mode));
-    Serial.printf("Socket   : %s\n", getModeName(bedroom1Socket.mode));
-    Serial.printf("AC       : %s\n", getModeName(bedroom1AC.mode));
-    Serial.printf("LDR Enable: %s\n", bedroom1LdrEnabled ? "ON" : "OFF");
-    Serial.println("Bedroom1");
-    Serial.println("Motion Timeout");
-    Serial.printf("%02u:%02u:%02u\n",
+    Serial.println("Bedroom1:");
+    Serial.printf("  Fan      : %s\n", getModeName(bedroom1Fan.mode));
+    Serial.printf("  Tube     : %s\n", getModeName(bedroom1Tube.mode));
+    Serial.printf("  Bulb     : %s\n", getModeName(bedroom1Bulb.mode));
+    Serial.printf("  Socket   : %s\n", getModeName(bedroom1Socket.mode));
+    Serial.printf("  AC       : %s\n", getModeName(bedroom1AC.mode));
+    Serial.printf("  LDR Enable: %s\n", bedroom1LdrEnabled ? "ON" : "OFF");
+    Serial.printf("  Motion Timeout: %02u:%02u:%02u (%lu ms)\n",
                   bedroom1Config.motionTimeoutHour,
                   bedroom1Config.motionTimeoutMinute,
-                  bedroom1Config.motionTimeoutSecond);
-    Serial.printf("(%lu ms)\n", bedroom1Config.motionTimeoutMs);
+                  bedroom1Config.motionTimeoutSecond,
+                  bedroom1Config.motionTimeoutMs);
+    Serial.println("LivingRoom:");
+    Serial.printf("  Tube 1   : %s\n", getModeName(livingroomTube1.mode));
+    Serial.printf("  Tube 2   : %s\n", getModeName(livingroomTube2.mode));
+    Serial.printf("  Fan      : %s\n", getModeName(livingroomFan.mode));
+    Serial.printf("  E-Bike   : %s\n", getModeName(livingroomEBike.mode));
+    Serial.printf("  Socket   : %s\n", getModeName(livingroomSocket.mode));
+    Serial.printf("  Bulb     : %s\n", getModeName(livingroomOutsideBulb.mode));
+    Serial.printf("  Extra 1  : %s\n", getModeName(livingroomExtra1.mode));
+    Serial.printf("  Extra 2  : %s\n", getModeName(livingroomExtra2.mode));
+    Serial.printf("  Motion Timeout: %02u:%02u:%02u (%lu ms)\n",
+                  livingroomConfig.motionTimeoutHour,
+                  livingroomConfig.motionTimeoutMinute,
+                  livingroomConfig.motionTimeoutSecond,
+                  livingroomConfig.motionTimeoutMs);
     Serial.println("Schedules (AUTO / SCHEDULE):");
 
     auto printDualSchedule = [](const char* name, const DeviceConfig &device) {
-        Serial.printf("%-9sAUTO: %02u:%02u - %02u:%02u  |  SCHED: %02u:%02u - %02u:%02u\n",
-                      name,
-                      device.autoStartHour, device.autoStartMinute, device.autoStopHour, device.autoStopMinute,
-                      device.schedStartHour, device.schedStartMinute, device.schedStopHour, device.schedStopMinute);
+        Serial.printf("%-12sAUTO: %02u:%02u - %02u:%02u  |  SCHED: %02u:%02u - %02u:%02u\n",
+                       name,
+                       device.autoStartHour, device.autoStartMinute, device.autoStopHour, device.autoStopMinute,
+                       device.schedStartHour, device.schedStartMinute, device.schedStopHour, device.schedStopMinute);
     };
 
-    printDualSchedule("Fan", bedroom1Fan);
-    printDualSchedule("Tube", bedroom1Tube);
-    printDualSchedule("Bulb", bedroom1Bulb);
-    printDualSchedule("Socket", bedroom1Socket);
-    printDualSchedule("AC", bedroom1AC);
+    Serial.println("  [Bedroom1]");
+    printDualSchedule("    Fan", bedroom1Fan);
+    printDualSchedule("    Tube", bedroom1Tube);
+    printDualSchedule("    Bulb", bedroom1Bulb);
+    printDualSchedule("    Socket", bedroom1Socket);
+    printDualSchedule("    AC", bedroom1AC);
+    Serial.println("  [LivingRoom]");
+    printDualSchedule("    Tube 1", livingroomTube1);
+    printDualSchedule("    Tube 2", livingroomTube2);
+    printDualSchedule("    Fan", livingroomFan);
+    printDualSchedule("    E-Bike", livingroomEBike);
+    printDualSchedule("    Socket", livingroomSocket);
+    printDualSchedule("    Outside Bulb", livingroomOutsideBulb);
+    printDualSchedule("    Extra 1", livingroomExtra1);
+    printDualSchedule("    Extra 2", livingroomExtra2);
     Serial.println("=================================");
 }
+
 
 void initDeviceCache()
 {

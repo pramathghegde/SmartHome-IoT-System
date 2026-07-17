@@ -8,7 +8,8 @@
 
 #include "node_ids.h"
 
-static bool offlinePrinted = false;
+static bool b1OfflinePrinted = false;
+static bool lrOfflinePrinted = false;
 
 const char* getNodeName(uint8_t nodeID)
 {
@@ -22,6 +23,7 @@ const char* getNodeName(uint8_t nodeID)
         case OUTDOOR_NODE:    return "OUTDOOR";
         case TANK_NODE:       return "TANK";
         case DOORLOCK_NODE:   return "DOORLOCK";
+        case LIVINGROOM_NODE: return "LIVINGROOM";
         default:              return "UNKNOWN";
     }
 }
@@ -39,33 +41,54 @@ void updateHeartbeat(uint8_t nodeID)
         }
 
         bedroom1.online = true;
+        bedroom1.lastHeartbeat = millis();
+        b1OfflinePrinted = false;
+    }
+    else if(nodeID == LIVINGROOM_NODE)
+    {
+        if(!livingroom.online)
+        {
+            Serial.print("[NODE] ");
+            Serial.print(getNodeName(nodeID));
+            Serial.println(" ONLINE");
+            livingroom.syncPending = true;
+        }
 
-        bedroom1.lastHeartbeat =
-            millis();
-
-        offlinePrinted = false;
+        livingroom.online = true;
+        livingroom.lastHeartbeat = millis();
+        lrOfflinePrinted = false;
     }
 }
 
 void checkNodeStatus()
 {
-    if(
-        millis()
-        -
-        bedroom1.lastHeartbeat
-        >
-        HEARTBEAT_TIMEOUT
-    )
+    // Bedroom1 status check
+    if (millis() - bedroom1.lastHeartbeat > HEARTBEAT_TIMEOUT)
     {
         bedroom1.online = false;
 
-        if(!offlinePrinted)
+        if(!b1OfflinePrinted)
         {
             Serial.print("[NODE] ");
             Serial.print(getNodeName(BEDROOM1_NODE));
             Serial.println(" OFFLINE");
 
-            offlinePrinted = true;
+            b1OfflinePrinted = true;
         }
     }
-}
+
+    // LivingRoom status check
+    if (millis() - livingroom.lastHeartbeat > HEARTBEAT_TIMEOUT)
+    {
+        livingroom.online = false;
+
+        if(!lrOfflinePrinted)
+        {
+            Serial.print("[NODE] ");
+            Serial.print(getNodeName(LIVINGROOM_NODE));
+            Serial.println(" OFFLINE");
+
+            lrOfflinePrinted = true;
+        }
+    }
+}

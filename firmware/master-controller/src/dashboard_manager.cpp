@@ -21,6 +21,8 @@
 #include "modes.h"
 #include "config.h"
 #include "device_ids.h"
+#include "node_manager.h"
+#include "node_ids.h"
 
 #include <Arduino.h>
 
@@ -164,6 +166,15 @@ static bool prevBulbState   = false;
 static bool prevSocketState = false;
 static bool prevACState     = false;
 
+static bool prevLrTube1State      = false;
+static bool prevLrTube2State      = false;
+static bool prevLrFanState        = false;
+static bool prevLrEBikeState      = false;
+static bool prevLrSocketState     = false;
+static bool prevLrOutsideBulbState = false;
+static bool prevLrExtra1State     = false;
+static bool prevLrExtra2State     = false;
+
 // ---------------------------------------------------------------
 // Blynk synchronization cache
 // ---------------------------------------------------------------
@@ -172,6 +183,15 @@ static uint8_t blynkTubeModeCache       = 0xFF;
 static uint8_t blynkBulbModeCache       = 0xFF;
 static uint8_t blynkSocketModeCache     = 0xFF;
 static uint8_t blynkACModeCache         = 0xFF;
+
+static uint8_t blynkLrTube1ModeCache      = 0xFF;
+static uint8_t blynkLrTube2ModeCache      = 0xFF;
+static uint8_t blynkLrFanModeCache        = 0xFF;
+static uint8_t blynkLrEBikeModeCache      = 0xFF;
+static uint8_t blynkLrSocketModeCache      = 0xFF;
+static uint8_t blynkLrOutsideBulbModeCache = 0xFF;
+static uint8_t blynkLrExtra1ModeCache     = 0xFF;
+static uint8_t blynkLrExtra2ModeCache     = 0xFF;
 
 struct BlynkTimerCache
 {
@@ -191,6 +211,15 @@ static BlynkTimerCache blynkBulbCache      = {0xFF, 0xFF, 0xFF, 0xFF, false, fal
 static BlynkTimerCache blynkSocketCache    = {0xFF, 0xFF, 0xFF, 0xFF, false, false, 0x00, ""};
 static BlynkTimerCache blynkACCache        = {0xFF, 0xFF, 0xFF, 0xFF, false, false, 0x00, ""};
 
+static BlynkTimerCache blynkLrTube1Cache      = {0xFF, 0xFF, 0xFF, 0xFF, false, false, 0x00, ""};
+static BlynkTimerCache blynkLrTube2Cache      = {0xFF, 0xFF, 0xFF, 0xFF, false, false, 0x00, ""};
+static BlynkTimerCache blynkLrFanCache        = {0xFF, 0xFF, 0xFF, 0xFF, false, false, 0x00, ""};
+static BlynkTimerCache blynkLrEBikeCache      = {0xFF, 0xFF, 0xFF, 0xFF, false, false, 0x00, ""};
+static BlynkTimerCache blynkLrSocketCache     = {0xFF, 0xFF, 0xFF, 0xFF, false, false, 0x00, ""};
+static BlynkTimerCache blynkLrOutsideBulbCache = {0xFF, 0xFF, 0xFF, 0xFF, false, false, 0x00, ""};
+static BlynkTimerCache blynkLrExtra1Cache     = {0xFF, 0xFF, 0xFF, 0xFF, false, false, 0x00, ""};
+static BlynkTimerCache blynkLrExtra2Cache     = {0xFF, 0xFF, 0xFF, 0xFF, false, false, 0x00, ""};
+
 static uint8_t blynkLdrEnableCache      = 0xFF;
 
 struct BlynkMotionTimeoutCache
@@ -202,6 +231,8 @@ struct BlynkMotionTimeoutCache
 };
 
 static BlynkMotionTimeoutCache blynkMotionTimeoutCache = {0xFF, 0xFF, 0xFF, false};
+static BlynkMotionTimeoutCache blynkLrMotionTimeoutCache = {0xFF, 0xFF, 0xFF, false};
+
 
 static bool blynkCacheInitialized = false;
 
@@ -323,38 +354,60 @@ static bool writeMotionTimeoutIfChanged(uint8_t pin, uint8_t hour, uint8_t minut
 // ---------------------------------------------------------------
 
 void notifyDeviceStateChange(
+    uint8_t nodeID,
     uint8_t deviceID,
     bool newState
 )
 {
     bool success = false;
-    switch(deviceID)
+    if (nodeID == BEDROOM1_NODE)
     {
-        case FAN_DEVICE:       success = writeLedIfChanged(150, newState, prevFanState);    break;
-        case TUBELIGHT_DEVICE: success = writeLedIfChanged(151, newState, prevTubeState);   break;
-        case BULB_DEVICE:      success = writeLedIfChanged(152, newState, prevBulbState);   break;
-        case SOCKET_DEVICE:    success = writeLedIfChanged(153, newState, prevSocketState); break;
-        case AC_DEVICE:        success = writeLedIfChanged(154, newState, prevACState);     break;
-        default: return;
+        switch(deviceID)
+        {
+            case FAN_DEVICE:       success = writeLedIfChanged(150, newState, prevFanState);    break;
+            case TUBELIGHT_DEVICE: success = writeLedIfChanged(151, newState, prevTubeState);   break;
+            case BULB_DEVICE:      success = writeLedIfChanged(152, newState, prevBulbState);   break;
+            case SOCKET_DEVICE:    success = writeLedIfChanged(153, newState, prevSocketState); break;
+            case AC_DEVICE:        success = writeLedIfChanged(154, newState, prevACState);     break;
+            default: return;
+        }
+    }
+    else if (nodeID == LIVINGROOM_NODE)
+    {
+        switch(deviceID)
+        {
+            case 1: success = writeLedIfChanged(160, newState, prevLrTube1State);       break;
+            case 2: success = writeLedIfChanged(161, newState, prevLrTube2State);       break;
+            case 3: success = writeLedIfChanged(162, newState, prevLrFanState);         break;
+            case 4: success = writeLedIfChanged(163, newState, prevLrEBikeState);       break;
+            case 5: success = writeLedIfChanged(164, newState, prevLrSocketState);      break;
+            case 6: success = writeLedIfChanged(165, newState, prevLrOutsideBulbState); break;
+            case 7: success = writeLedIfChanged(166, newState, prevLrExtra1State);      break;
+            case 8: success = writeLedIfChanged(167, newState, prevLrExtra2State);      break;
+            default: return;
+        }
     }
 
     if (success)
     {
         int pin = -1;
-        switch(deviceID)
+        if (nodeID == BEDROOM1_NODE)
         {
-            case FAN_DEVICE:       pin = 150; break;
-            case TUBELIGHT_DEVICE: pin = 151; break;
-            case BULB_DEVICE:      pin = 152; break;
-            case SOCKET_DEVICE:    pin = 153; break;
-            case AC_DEVICE:        pin = 154; break;
+            pin = 150 + (deviceID - 1);
         }
-        Serial.print("[BLYNK] LED V");
+        else if (nodeID == LIVINGROOM_NODE)
+        {
+            pin = 160 + (deviceID - 1);
+        }
+        Serial.print("[BLYNK] LED Node=");
+        Serial.print(getNodeName(nodeID));
+        Serial.print(" V");
         Serial.print(pin);
         Serial.print(" -> ");
         Serial.println(newState ? "ON" : "OFF");
     }
 }
+
 
 // ---------------------------------------------------------------
 // sendStatusToTerminal()
@@ -382,13 +435,13 @@ static void sendStatusToTerminal()
         }
     }
 
-    // Day/Night from LDR
-    const char* lightStatus =
+    // Day/Night from B1 LDR (Global)
+    const char* globalLightStatus =
         (bedroom1.brightness < DARK_THRESHOLD_LOW) ?
         "NIGHT" : "DAY  ";
 
     String status;
-    status.reserve(900);
+    status.reserve(1200);
 
     appendLine(status, "==============================");
     appendLine(status, "   ADVAITA SMART HOME");
@@ -397,38 +450,67 @@ static void sendStatusToTerminal()
 
     appendLine(status);
     appendLine(status, "--- ENVIRONMENT ----------");
-    appendLine(status, "  Temp  : --.- C");        // Future DHT/BME
-    appendLine(status, "  Humid : --.- %");        // Future DHT/BME
-    appendLine(status, String("  Light : ") + lightStatus);
-    appendLine(status, String("  LDR   : ") + bedroom1.brightness);
+    char tempBuf[40];
+    char humBuf[40];
+    snprintf(tempBuf, sizeof(tempBuf), "  Temp  : %.1f C", globalTemperature);
+    snprintf(humBuf, sizeof(humBuf), "  Humid : %.1f %%", globalHumidity);
+    appendLine(status, tempBuf);
+    appendLine(status, humBuf);
+    appendLine(status, String("  Light : ") + globalLightStatus);
     appendLine(status, "  Door  : ------");        // Future door lock
 
     appendLine(status);
     appendLine(status, "--- ROOM STATUS ----------");
     appendLine(status, String("  Bedroom1 : ") + (bedroom1.online ? "ONLINE " : "OFFLINE"));
-    appendLine(status, String("  Motion   : ") + (bedroom1.motionDetected ? "DETECTED" : "CLEAR   "));
+    appendLine(status, String("    Motion : ") + (bedroom1.motionDetected ? "DETECTED" : "CLEAR   "));
     char toBuf[40];
-    snprintf(toBuf, sizeof(toBuf), "  Motion TO: %02u:%02u:%02u",
+    snprintf(toBuf, sizeof(toBuf), "    MotionTO: %02u:%02u:%02u",
              bedroom1Config.motionTimeoutHour,
              bedroom1Config.motionTimeoutMinute,
              bedroom1Config.motionTimeoutSecond);
     appendLine(status, toBuf);
-    appendLine(status, "  Bedroom2 : -------");    // Future node
-    appendLine(status, "  Hall     : -------");    // Future node
-    appendLine(status, "  Kitchen  : -------");    // Future node
+    appendLine(status, String("    LDR Raw : ") + bedroom1.brightness);
+
+    appendLine(status, String("  LivingRoom: ") + (livingroom.online ? "ONLINE " : "OFFLINE"));
+    appendLine(status, String("    Motion : ") + (livingroom.motionDetected ? "DETECTED" : "CLEAR   "));
+    char toBufLr[40];
+    snprintf(toBufLr, sizeof(toBufLr), "    MotionTO: %02u:%02u:%02u",
+             livingroomConfig.motionTimeoutHour,
+             livingroomConfig.motionTimeoutMinute,
+             livingroomConfig.motionTimeoutSecond);
+    appendLine(status, toBufLr);
 
     appendLine(status);
     appendLine(status, "--- APPLIANCES -----------");
-    appendLine(status, String("  Fan    : ") + stateStr(bedroom1Fan.currentState) +
+    appendLine(status, "  [Bedroom1]");
+    appendLine(status, String("    Fan    : ") + stateStr(bedroom1Fan.currentState) +
         "  [" + modeStr(bedroom1Fan.mode) + "]");
-    appendLine(status, String("  Tube   : ") + stateStr(bedroom1Tube.currentState) +
+    appendLine(status, String("    Tube   : ") + stateStr(bedroom1Tube.currentState) +
         "  [" + modeStr(bedroom1Tube.mode) + "]");
-    appendLine(status, String("  Bulb   : ") + stateStr(bedroom1Bulb.currentState) +
+    appendLine(status, String("    Bulb   : ") + stateStr(bedroom1Bulb.currentState) +
         "  [" + modeStr(bedroom1Bulb.mode) + "]");
-    appendLine(status, String("  Socket : ") + stateStr(bedroom1Socket.currentState) +
+    appendLine(status, String("    Socket : ") + stateStr(bedroom1Socket.currentState) +
         "  [" + modeStr(bedroom1Socket.mode) + "]");
-    appendLine(status, String("  AC     : ") + stateStr(bedroom1AC.currentState) +
+    appendLine(status, String("    AC     : ") + stateStr(bedroom1AC.currentState) +
         "  [" + modeStr(bedroom1AC.mode) + "]");
+
+    appendLine(status, "  [LivingRoom]");
+    appendLine(status, String("    Tube 1 : ") + stateStr(livingroomTube1.currentState) +
+        "  [" + modeStr(livingroomTube1.mode) + "]");
+    appendLine(status, String("    Tube 2 : ") + stateStr(livingroomTube2.currentState) +
+        "  [" + modeStr(livingroomTube2.mode) + "]");
+    appendLine(status, String("    Fan    : ") + stateStr(livingroomFan.currentState) +
+        "  [" + modeStr(livingroomFan.mode) + "]");
+    appendLine(status, String("    E-Bike : ") + stateStr(livingroomEBike.currentState) +
+        "  [" + modeStr(livingroomEBike.mode) + "]");
+    appendLine(status, String("    Socket : ") + stateStr(livingroomSocket.currentState) +
+        "  [" + modeStr(livingroomSocket.mode) + "]");
+    appendLine(status, String("    Bulb   : ") + stateStr(livingroomOutsideBulb.currentState) +
+        "  [" + modeStr(livingroomOutsideBulb.mode) + "]");
+    appendLine(status, String("    Extra 1: ") + stateStr(livingroomExtra1.currentState) +
+        "  [" + modeStr(livingroomExtra1.mode) + "]");
+    appendLine(status, String("    Extra 2: ") + stateStr(livingroomExtra2.currentState) +
+        "  [" + modeStr(livingroomExtra2.mode) + "]");
 
     appendLine(status);
     appendLine(status, "--- SYSTEM ---------------");
@@ -441,6 +523,7 @@ static void sendStatusToTerminal()
         Serial.println("[BLYNK] Terminal status sent");
     }
 }
+
 
 static void handleIncomingTimer(const char* prefix, DeviceConfig &device, const TimeInputParam &t, BlynkTimerCache &cache)
 {
@@ -548,90 +631,209 @@ static void handleIncomingTimer(const char* prefix, DeviceConfig &device, const 
     snprintf(cache.timezone, sizeof(cache.timezone), "%s", incomingTz.c_str());
 }
 
-void setDeviceMode(uint8_t deviceID, uint8_t newMode)
+void setDeviceMode(uint8_t nodeID, uint8_t deviceID, uint8_t newMode)
 {
     DeviceConfig* device = nullptr;
     BlynkTimerCache* cache = nullptr;
     uint8_t* modeCache = nullptr;
     const char* prefix = nullptr;
 
-    switch (deviceID)
+    if (nodeID == BEDROOM1_NODE)
     {
-        case FAN_DEVICE:
-            device = &bedroom1Fan;
-            cache = &blynkFanCache;
-            modeCache = &blynkFanModeCache;
-            prefix = "fan";
-            break;
-        case TUBELIGHT_DEVICE:
-            device = &bedroom1Tube;
-            cache = &blynkTubeCache;
-            modeCache = &blynkTubeModeCache;
-            prefix = "tube";
-            break;
-        case BULB_DEVICE:
-            device = &bedroom1Bulb;
-            cache = &blynkBulbCache;
-            modeCache = &blynkBulbModeCache;
-            prefix = "bulb";
-            break;
-        case SOCKET_DEVICE:
-            device = &bedroom1Socket;
-            cache = &blynkSocketCache;
-            modeCache = &blynkSocketModeCache;
-            prefix = "sock";
-            break;
-        case AC_DEVICE:
-            device = &bedroom1AC;
-            cache = &blynkACCache;
-            modeCache = &blynkACModeCache;
-            prefix = "ac";
-            break;
-        default:
-            return;
+        switch (deviceID)
+        {
+            case FAN_DEVICE:
+                device = &bedroom1Fan;
+                cache = &blynkFanCache;
+                modeCache = &blynkFanModeCache;
+                prefix = "fan";
+                break;
+            case TUBELIGHT_DEVICE:
+                device = &bedroom1Tube;
+                cache = &blynkTubeCache;
+                modeCache = &blynkTubeModeCache;
+                prefix = "tube";
+                break;
+            case BULB_DEVICE:
+                device = &bedroom1Bulb;
+                cache = &blynkBulbCache;
+                modeCache = &blynkBulbModeCache;
+                prefix = "bulb";
+                break;
+            case SOCKET_DEVICE:
+                device = &bedroom1Socket;
+                cache = &blynkSocketCache;
+                modeCache = &blynkSocketModeCache;
+                prefix = "sock";
+                break;
+            case AC_DEVICE:
+                device = &bedroom1AC;
+                cache = &blynkACCache;
+                modeCache = &blynkACModeCache;
+                prefix = "ac";
+                break;
+            default:
+                return;
+        }
+    }
+    else if (nodeID == LIVINGROOM_NODE)
+    {
+        switch (deviceID)
+        {
+            case 1:
+                device = &livingroomTube1;
+                cache = &blynkLrTube1Cache;
+                modeCache = &blynkLrTube1ModeCache;
+                prefix = "lr_t1";
+                break;
+            case 2:
+                device = &livingroomTube2;
+                cache = &blynkLrTube2Cache;
+                modeCache = &blynkLrTube2ModeCache;
+                prefix = "lr_t2";
+                break;
+            case 3:
+                device = &livingroomFan;
+                cache = &blynkLrFanCache;
+                modeCache = &blynkLrFanModeCache;
+                prefix = "lr_fan";
+                break;
+            case 4:
+                device = &livingroomEBike;
+                cache = &blynkLrEBikeCache;
+                modeCache = &blynkLrEBikeModeCache;
+                prefix = "lr_ebk";
+                break;
+            case 5:
+                device = &livingroomSocket;
+                cache = &blynkLrSocketCache;
+                modeCache = &blynkLrSocketModeCache;
+                prefix = "lr_soc";
+                break;
+            case 6:
+                device = &livingroomOutsideBulb;
+                cache = &blynkLrOutsideBulbCache;
+                modeCache = &blynkLrOutsideBulbModeCache;
+                prefix = "lr_ob";
+                break;
+            case 7:
+                device = &livingroomExtra1;
+                cache = &blynkLrExtra1Cache;
+                modeCache = &blynkLrExtra1ModeCache;
+                prefix = "lr_ex1";
+                break;
+            case 8:
+                device = &livingroomExtra2;
+                cache = &blynkLrExtra2Cache;
+                modeCache = &blynkLrExtra2ModeCache;
+                prefix = "lr_ex2";
+                break;
+            default:
+                return;
+        }
     }
 
-    if (device->mode != newMode)
+    if (device != nullptr && device->mode != newMode)
     {
         device->mode = newMode;
         saveSingleDevice(prefix, *device);
-        writeModeIfChanged(deviceID - 1, newMode, *modeCache);
-        syncTimerWidget(100 + (deviceID - 1), *device, *cache);
-        Serial.printf("[MODE CHANGE] Device=%d Mode=%d\n", deviceID, newMode);
+        uint8_t pin;
+        if (nodeID == BEDROOM1_NODE)
+        {
+            pin = deviceID - 1;
+        }
+        else
+        {
+            if (deviceID <= 5) pin = 10 + (deviceID - 1);
+            else pin = 17 + (deviceID - 6);
+        }
+        writeModeIfChanged(pin, newMode, *modeCache);
+        uint8_t timerPin = (nodeID == BEDROOM1_NODE) ? (100 + (deviceID - 1)) : (110 + (deviceID - 1));
+        syncTimerWidget(timerPin, *device, *cache);
+        Serial.printf("[MODE CHANGE] Node=%s Device=%d Mode=%d\n", getNodeName(nodeID), deviceID, newMode);
     }
 }
+
 
 // ---------------------------------------------------------------
 // V0-V4 : Mode Controls (Blynk → Master)
 // ---------------------------------------------------------------
 
+// ---------------------------------------------------------------
+// V0-V4 : Bedroom1 Mode Controls (Blynk → Master)
+// ---------------------------------------------------------------
+
 BLYNK_WRITE(V0)
 {
-    setDeviceMode(FAN_DEVICE, param.asInt());
+    setDeviceMode(BEDROOM1_NODE, FAN_DEVICE, param.asInt());
 }
 
 BLYNK_WRITE(V1)
 {
-    setDeviceMode(TUBELIGHT_DEVICE, param.asInt());
+    setDeviceMode(BEDROOM1_NODE, TUBELIGHT_DEVICE, param.asInt());
 }
 
 BLYNK_WRITE(V2)
 {
-    setDeviceMode(BULB_DEVICE, param.asInt());
+    setDeviceMode(BEDROOM1_NODE, BULB_DEVICE, param.asInt());
 }
 
 BLYNK_WRITE(V3)
 {
-    setDeviceMode(SOCKET_DEVICE, param.asInt());
+    setDeviceMode(BEDROOM1_NODE, SOCKET_DEVICE, param.asInt());
 }
 
 BLYNK_WRITE(V4)
 {
-    setDeviceMode(AC_DEVICE, param.asInt());
+    setDeviceMode(BEDROOM1_NODE, AC_DEVICE, param.asInt());
 }
 
 // ---------------------------------------------------------------
-// V100-V104 : Schedule Inputs (Blynk → Master)
+// V10-V14, V17-V19 : LivingRoom Mode Controls (Blynk → Master)
+// ---------------------------------------------------------------
+
+BLYNK_WRITE(V10)
+{
+    setDeviceMode(LIVINGROOM_NODE, 1, param.asInt());
+}
+
+BLYNK_WRITE(V11)
+{
+    setDeviceMode(LIVINGROOM_NODE, 2, param.asInt());
+}
+
+BLYNK_WRITE(V12)
+{
+    setDeviceMode(LIVINGROOM_NODE, 3, param.asInt());
+}
+
+BLYNK_WRITE(V13)
+{
+    setDeviceMode(LIVINGROOM_NODE, 4, param.asInt());
+}
+
+BLYNK_WRITE(V14)
+{
+    setDeviceMode(LIVINGROOM_NODE, 5, param.asInt());
+}
+
+BLYNK_WRITE(V17)
+{
+    setDeviceMode(LIVINGROOM_NODE, 6, param.asInt());
+}
+
+BLYNK_WRITE(V18)
+{
+    setDeviceMode(LIVINGROOM_NODE, 7, param.asInt());
+}
+
+BLYNK_WRITE(V19)
+{
+    setDeviceMode(LIVINGROOM_NODE, 8, param.asInt());
+}
+
+// ---------------------------------------------------------------
+// V100-V104 : Bedroom1 Schedule Inputs (Blynk → Master)
 // ---------------------------------------------------------------
 
 BLYNK_WRITE(V100)
@@ -669,15 +871,75 @@ BLYNK_WRITE(V104)
     handleIncomingTimer("ac", bedroom1AC, t, blynkACCache);
 }
 
+// ---------------------------------------------------------------
+// V110-V117 : LivingRoom Schedule Inputs (Blynk → Master)
+// ---------------------------------------------------------------
+
+BLYNK_WRITE(V110)
+{
+    if (timerSyncInProgress) return;
+    TimeInputParam t(param);
+    handleIncomingTimer("lr_t1", livingroomTube1, t, blynkLrTube1Cache);
+}
+
+BLYNK_WRITE(V111)
+{
+    if (timerSyncInProgress) return;
+    TimeInputParam t(param);
+    handleIncomingTimer("lr_t2", livingroomTube2, t, blynkLrTube2Cache);
+}
+
+BLYNK_WRITE(V112)
+{
+    if (timerSyncInProgress) return;
+    TimeInputParam t(param);
+    handleIncomingTimer("lr_fan", livingroomFan, t, blynkLrFanCache);
+}
+
+BLYNK_WRITE(V113)
+{
+    if (timerSyncInProgress) return;
+    TimeInputParam t(param);
+    handleIncomingTimer("lr_ebk", livingroomEBike, t, blynkLrEBikeCache);
+}
+
+BLYNK_WRITE(V114)
+{
+    if (timerSyncInProgress) return;
+    TimeInputParam t(param);
+    handleIncomingTimer("lr_soc", livingroomSocket, t, blynkLrSocketCache);
+}
+
+BLYNK_WRITE(V115)
+{
+    if (timerSyncInProgress) return;
+    TimeInputParam t(param);
+    handleIncomingTimer("lr_ob", livingroomOutsideBulb, t, blynkLrOutsideBulbCache);
+}
+
+BLYNK_WRITE(V116)
+{
+    if (timerSyncInProgress) return;
+    TimeInputParam t(param);
+    handleIncomingTimer("lr_ex1", livingroomExtra1, t, blynkLrExtra1Cache);
+}
+
+BLYNK_WRITE(V117)
+{
+    if (timerSyncInProgress) return;
+    TimeInputParam t(param);
+    handleIncomingTimer("lr_ex2", livingroomExtra2, t, blynkLrExtra2Cache);
+}
+
 #define BLYNK_WRITE_PIN(pin) BLYNK_WRITE_PIN_HIDDEN(pin)
 #define BLYNK_WRITE_PIN_HIDDEN(pin) BLYNK_WRITE(pin)
 
 BLYNK_WRITE_PIN(VPIN_B1_LDR_ENABLE)
 {
     bedroom1LdrEnabled = (param.asInt() == 1);
-    Serial.print("[BLYNK] LDR ENABLE -> ");
+    Serial.print("[BLYNK] B1 LDR ENABLE -> ");
     Serial.println(bedroom1LdrEnabled ? "ON" : "OFF");
-    saveRoomLdrEnabled(bedroom1LdrEnabled);
+    saveRoomLdrEnabled(BEDROOM1_NODE, bedroom1LdrEnabled);
     blynkLdrEnableCache = param.asInt();
 }
 
@@ -700,8 +962,8 @@ BLYNK_WRITE_PIN(VPIN_B1_MOTION_TIMEOUT)
     if (changed)
     {
         bedroom1Config = tempConfig;
-        saveRoomMotionTimeout(bedroom1Config);
-        Serial.printf("[BLYNK] Motion Timeout updated to %02u:%02u:%02u (%lu ms)\n", 
+        saveRoomMotionTimeout(BEDROOM1_NODE, bedroom1Config);
+        Serial.printf("[BLYNK] B1 Motion Timeout updated to %02u:%02u:%02u (%lu ms)\n", 
                       bedroom1Config.motionTimeoutHour, 
                       bedroom1Config.motionTimeoutMinute, 
                       bedroom1Config.motionTimeoutSecond, 
@@ -725,36 +987,117 @@ BLYNK_WRITE_PIN(VPIN_B1_MOTION_TIMEOUT)
     blynkMotionTimeoutCache.hasStart = true;
 }
 
+BLYNK_WRITE_PIN(VPIN_LR_LDR_ENABLE)
+{
+    // Unused / Decommissioned in Stage 3B
+}
+
+BLYNK_WRITE_PIN(VPIN_LR_MOTION_TIMEOUT)
+{
+    if (timerSyncInProgress) return;
+    TimeInputParam t(param);
+
+    uint8_t h = t.hasStartTime() ? t.getStartHour() : 0;
+    uint8_t m = t.hasStartTime() ? t.getStartMinute() : 0;
+    uint8_t s = t.hasStartTime() ? t.getStartSecond() : 0;
+
+    RoomConfig tempConfig = { h, m, s, 0 };
+    clampRoomMotionTimeout(tempConfig);
+
+    bool changed = (tempConfig.motionTimeoutHour != livingroomConfig.motionTimeoutHour ||
+                    tempConfig.motionTimeoutMinute != livingroomConfig.motionTimeoutMinute ||
+                    tempConfig.motionTimeoutSecond != livingroomConfig.motionTimeoutSecond);
+
+    if (changed)
+    {
+        livingroomConfig = tempConfig;
+        saveRoomMotionTimeout(LIVINGROOM_NODE, livingroomConfig);
+        Serial.printf("[BLYNK] LR Motion Timeout updated to %02u:%02u:%02u (%lu ms)\n", 
+                      livingroomConfig.motionTimeoutHour, 
+                      livingroomConfig.motionTimeoutMinute, 
+                      livingroomConfig.motionTimeoutSecond, 
+                      livingroomConfig.motionTimeoutMs);
+
+        if (tempConfig.motionTimeoutHour != h || 
+            tempConfig.motionTimeoutMinute != m || 
+            tempConfig.motionTimeoutSecond != s)
+        {
+            writeMotionTimeoutIfChanged(VPIN_LR_MOTION_TIMEOUT_NUM, 
+                                        livingroomConfig.motionTimeoutHour, 
+                                        livingroomConfig.motionTimeoutMinute, 
+                                        livingroomConfig.motionTimeoutSecond, 
+                                        blynkLrMotionTimeoutCache);
+        }
+    }
+
+    blynkLrMotionTimeoutCache.hour = livingroomConfig.motionTimeoutHour;
+    blynkLrMotionTimeoutCache.minute = livingroomConfig.motionTimeoutMinute;
+    blynkLrMotionTimeoutCache.second = livingroomConfig.motionTimeoutSecond;
+    blynkLrMotionTimeoutCache.hasStart = true;
+}
+
 void updateAllBlynkWidgets()
 {
     Serial.println("[BLYNK] Updating all widgets to match current configuration (cache filtered)...");
 
-    // 1. Mode widgets: V0-V4
+    // 1. Mode widgets: V0-V4 (Bedroom1), V10-V14 (LivingRoom)
     writeModeIfChanged(0, bedroom1Fan.mode, blynkFanModeCache);
     writeModeIfChanged(1, bedroom1Tube.mode, blynkTubeModeCache);
     writeModeIfChanged(2, bedroom1Bulb.mode, blynkBulbModeCache);
     writeModeIfChanged(3, bedroom1Socket.mode, blynkSocketModeCache);
     writeModeIfChanged(4, bedroom1AC.mode, blynkACModeCache);
 
+    writeModeIfChanged(10, livingroomTube1.mode, blynkLrTube1ModeCache);
+    writeModeIfChanged(11, livingroomTube2.mode, blynkLrTube2ModeCache);
+    writeModeIfChanged(12, livingroomFan.mode, blynkLrFanModeCache);
+    writeModeIfChanged(13, livingroomEBike.mode, blynkLrEBikeModeCache);
+    writeModeIfChanged(14, livingroomSocket.mode, blynkLrSocketModeCache);
+    writeModeIfChanged(17, livingroomOutsideBulb.mode, blynkLrOutsideBulbModeCache);
+    writeModeIfChanged(18, livingroomExtra1.mode, blynkLrExtra1ModeCache);
+    writeModeIfChanged(19, livingroomExtra2.mode, blynkLrExtra2ModeCache);
+
     // 2. LDR Enable Switch Widget
     writeLdrEnableIfChanged(VPIN_B1_LDR_ENABLE_NUM, bedroom1LdrEnabled, blynkLdrEnableCache);
 
+    // Global Temperature & Humidity Widgets
+    Blynk.virtualWrite(VPIN_GLOBAL_TEMPERATURE, globalTemperature);
+    Blynk.virtualWrite(VPIN_GLOBAL_HUMIDITY, globalHumidity);
+
     // 2b. Motion Timeout Duration Widget
     writeMotionTimeoutIfChanged(VPIN_B1_MOTION_TIMEOUT_NUM, bedroom1Config.motionTimeoutHour, bedroom1Config.motionTimeoutMinute, bedroom1Config.motionTimeoutSecond, blynkMotionTimeoutCache);
+    writeMotionTimeoutIfChanged(VPIN_LR_MOTION_TIMEOUT_NUM, livingroomConfig.motionTimeoutHour, livingroomConfig.motionTimeoutMinute, livingroomConfig.motionTimeoutSecond, blynkLrMotionTimeoutCache);
 
-    // 3. LED widgets: V150-V154
+    // 3. LED widgets: V150-V154 (Bedroom1), V160-V167 (LivingRoom)
     writeLedIfChanged(150, bedroom1Fan.currentState, prevFanState);
     writeLedIfChanged(151, bedroom1Tube.currentState, prevTubeState);
     writeLedIfChanged(152, bedroom1Bulb.currentState, prevBulbState);
     writeLedIfChanged(153, bedroom1Socket.currentState, prevSocketState);
     writeLedIfChanged(154, bedroom1AC.currentState, prevACState);
 
-    // 4. Timer/Schedule widgets: V100-V104
+    writeLedIfChanged(160, livingroomTube1.currentState, prevLrTube1State);
+    writeLedIfChanged(161, livingroomTube2.currentState, prevLrTube2State);
+    writeLedIfChanged(162, livingroomFan.currentState, prevLrFanState);
+    writeLedIfChanged(163, livingroomEBike.currentState, prevLrEBikeState);
+    writeLedIfChanged(164, livingroomSocket.currentState, prevLrSocketState);
+    writeLedIfChanged(165, livingroomOutsideBulb.currentState, prevLrOutsideBulbState);
+    writeLedIfChanged(166, livingroomExtra1.currentState, prevLrExtra1State);
+    writeLedIfChanged(167, livingroomExtra2.currentState, prevLrExtra2State);
+
+    // 4. Timer/Schedule widgets: V100-V104 (Bedroom1), V110-V117 (LivingRoom)
     syncTimerWidget(100, bedroom1Fan, blynkFanCache);
     syncTimerWidget(101, bedroom1Tube, blynkTubeCache);
     syncTimerWidget(102, bedroom1Bulb, blynkBulbCache);
     syncTimerWidget(103, bedroom1Socket, blynkSocketCache);
     syncTimerWidget(104, bedroom1AC, blynkACCache);
+
+    syncTimerWidget(110, livingroomTube1, blynkLrTube1Cache);
+    syncTimerWidget(111, livingroomTube2, blynkLrTube2Cache);
+    syncTimerWidget(112, livingroomFan, blynkLrFanCache);
+    syncTimerWidget(113, livingroomEBike, blynkLrEBikeCache);
+    syncTimerWidget(114, livingroomSocket, blynkLrSocketCache);
+    syncTimerWidget(115, livingroomOutsideBulb, blynkLrOutsideBulbCache);
+    syncTimerWidget(116, livingroomExtra1, blynkLrExtra1Cache);
+    syncTimerWidget(117, livingroomExtra2, blynkLrExtra2Cache);
 
     blynkCacheInitialized = true;
 }
@@ -764,10 +1107,6 @@ BLYNK_CONNECTED()
     Serial.println("[BLYNK] Connected callback triggered");
     updateAllBlynkWidgets();
 }
-
-// ---------------------------------------------------------------
-// initDashboard
-// ---------------------------------------------------------------
 
 void initDashboard()
 {
@@ -787,13 +1126,16 @@ void initDashboard()
     prevBulbState   = bedroom1Bulb.currentState;
     prevSocketState = bedroom1Socket.currentState;
     prevACState     = bedroom1AC.currentState;
-}
 
-// ---------------------------------------------------------------
-// updateDashboard
-// Blynk.run() every loop = free
-// Terminal update every 60 seconds = 1 msg/min
-// ---------------------------------------------------------------
+    prevLrTube1State       = livingroomTube1.currentState;
+    prevLrTube2State       = livingroomTube2.currentState;
+    prevLrFanState         = livingroomFan.currentState;
+    prevLrEBikeState       = livingroomEBike.currentState;
+    prevLrSocketState      = livingroomSocket.currentState;
+    prevLrOutsideBulbState = livingroomOutsideBulb.currentState;
+    prevLrExtra1State      = livingroomExtra1.currentState;
+    prevLrExtra2State      = livingroomExtra2.currentState;
+}
 
 void updateDashboard()
 {
@@ -811,6 +1153,23 @@ void updateDashboard()
 
     Blynk.run();
 
+    if (Blynk.connected())
+    {
+        static float prevTemp = -999.0f;
+        static float prevHum = -999.0f;
+
+        if (globalTemperature != prevTemp && !isnan(globalTemperature))
+        {
+            prevTemp = globalTemperature;
+            Blynk.virtualWrite(VPIN_GLOBAL_TEMPERATURE, prevTemp);
+        }
+        if (globalHumidity != prevHum && !isnan(globalHumidity))
+        {
+            prevHum = globalHumidity;
+            Blynk.virtualWrite(VPIN_GLOBAL_HUMIDITY, prevHum);
+        }
+    }
+
     static unsigned long lastSend = 0;
     static unsigned long lastAudit = 0;
 
@@ -826,3 +1185,4 @@ void updateDashboard()
         printBlynkAudit();
     }
 }
+

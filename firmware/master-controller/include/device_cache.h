@@ -33,6 +33,15 @@ extern DeviceConfig bedroom1Socket;
 extern DeviceConfig bedroom1AC;
 extern bool bedroom1LdrEnabled;
 
+extern DeviceConfig livingroomTube1;
+extern DeviceConfig livingroomTube2;
+extern DeviceConfig livingroomFan;
+extern DeviceConfig livingroomEBike;
+extern DeviceConfig livingroomSocket;
+extern DeviceConfig livingroomOutsideBulb;
+extern DeviceConfig livingroomExtra1;
+extern DeviceConfig livingroomExtra2;
+
 struct RoomConfig
 {
     uint8_t motionTimeoutHour;
@@ -42,6 +51,8 @@ struct RoomConfig
 };
 
 extern RoomConfig bedroom1Config;
+extern RoomConfig livingroomConfig;
+
 
 void initDeviceCache();
 void loadConfiguration();
@@ -50,9 +61,10 @@ void saveDeviceConfiguration(Preferences &prefs, const char* prefix, const Devic
 bool loadDeviceConfiguration(Preferences &prefs, const char* prefix, DeviceConfig &device, const DeviceConfig &defaultConfig);
 bool validateConfiguration(DeviceConfig &device, const DeviceConfig &defaultConfig);
 void saveSingleDevice(const char* prefix, const DeviceConfig &device);
-void saveRoomLdrEnabled(bool enabled);
-void saveRoomMotionTimeout(const RoomConfig &config);
+void saveRoomLdrEnabled(uint8_t nodeID, bool enabled);
+void saveRoomMotionTimeout(uint8_t nodeID, const RoomConfig &config);
 void clampRoomMotionTimeout(RoomConfig &config);
 void printRestoredConfiguration();
+
 
 

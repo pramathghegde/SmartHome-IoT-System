@@ -113,13 +113,30 @@ void initEspNow()
     esp_now_register_recv_cb(onDataRecv);
 
     esp_now_peer_info_t peerInfo = {};
-
-    memcpy(peerInfo.peer_addr, BEDROOM1_MAC, 6);
-
     peerInfo.channel = 0;
     peerInfo.encrypt = false;
 
-    esp_now_add_peer(&peerInfo);
+    // Register Bedroom1 peer
+    memcpy(peerInfo.peer_addr, BEDROOM1_MAC, 6);
+    if (esp_now_add_peer(&peerInfo) == ESP_OK)
+    {
+        Serial.println("[ESP-NOW] Peer BEDROOM1 added");
+    }
+    else
+    {
+        Serial.println("[ESP-NOW] Failed to add peer BEDROOM1");
+    }
+
+    // Register LivingRoom peer
+    memcpy(peerInfo.peer_addr, LIVINGROOM_MAC, 6);
+    if (esp_now_add_peer(&peerInfo) == ESP_OK)
+    {
+        Serial.println("[ESP-NOW] Peer LIVINGROOM added");
+    }
+    else
+    {
+        Serial.println("[ESP-NOW] Failed to add peer LIVINGROOM");
+    }
 
     Serial.println("[ESP-NOW] Ready");
 }
@@ -133,10 +150,20 @@ void sendAck(uint8_t targetNode)
     tx.command      = CMD_ACK;
     tx.uptime       = millis() / 1000;
 
+    const uint8_t* targetMac = nullptr;
     if (targetNode == BEDROOM1_NODE)
     {
+        targetMac = BEDROOM1_MAC;
+    }
+    else if (targetNode == LIVINGROOM_NODE)
+    {
+        targetMac = LIVINGROOM_MAC;
+    }
+
+    if (targetMac != nullptr)
+    {
         esp_now_send(
-            BEDROOM1_MAC,
+            targetMac,
             (uint8_t*)&tx,
             sizeof(tx)
         );
@@ -160,41 +187,43 @@ bool sendDeviceCommand(
 
     lastSendSuccess = false;
 
+    const uint8_t* targetMac = nullptr;
     if (targetNode == BEDROOM1_NODE)
     {
-        // FIX: Removed blocking while(delay(1)) loop.
-        // The old code blocked for up to 50ms per device = 250ms total
-        // per automation cycle when all 5 devices change state.
-        // This starved Blynk.run() and ArduinoOTA.handle(),
-        // causing Blynk disconnects and WiFi reconnects which
-        // disrupted ESP-NOW channel, causing the 5-10 minute blackouts.
-        //
-        // Now: fire-and-check. esp_now_send() queues the packet.
-        // The send callback (onDataSent) updates lastSendSuccess
-        // asynchronously. We check it on the NEXT automation cycle.
-        // This is non-blocking and safe.
-
-        Serial.print("[ESP SEND] CMD_SET_DEVICE_STATE Device=");
-        Serial.print(deviceID);
-        Serial.print(" State=");
-        Serial.println(state ? "ON" : "OFF");
-
-        esp_err_t result = esp_now_send(
-            BEDROOM1_MAC,
-            (uint8_t*)&tx,
-            sizeof(tx)
-        );
-
-        Serial.print("[ESP SEND RESULT] Device=");
-        Serial.print(deviceID);
-        Serial.print(" State=");
-        Serial.print(state ? "ON" : "OFF");
-        Serial.println(result == ESP_OK ? " queued" : " queue-failed");
-
-        return result == ESP_OK;
+        targetMac = BEDROOM1_MAC;
+    }
+    else if (targetNode == LIVINGROOM_NODE)
+    {
+        targetMac = LIVINGROOM_MAC;
     }
 
-    return false;
+    if (targetMac == nullptr)
+    {
+        return false;
+    }
+
+    Serial.print("[ESP SEND] CMD_SET_DEVICE_STATE Node=");
+    Serial.print(getNodeName(targetNode));
+    Serial.print(" Device=");
+    Serial.print(deviceID);
+    Serial.print(" State=");
+    Serial.println(state ? "ON" : "OFF");
+
+    esp_err_t result = esp_now_send(
+        targetMac,
+        (uint8_t*)&tx,
+        sizeof(tx)
+    );
+
+    Serial.print("[ESP SEND RESULT] Node=");
+    Serial.print(getNodeName(targetNode));
+    Serial.print(" Device=");
+    Serial.print(deviceID);
+    Serial.print(" State=");
+    Serial.print(state ? "ON" : "OFF");
+    Serial.println(result == ESP_OK ? " queued" : " queue-failed");
+
+    return result == ESP_OK;
 }
 
 void processIncomingPackets()
@@ -225,31 +254,34 @@ void processIncomingPackets()
         switch(packet.command)
         {
             case CMD_ACK:
-                if (packet.senderNode == BEDROOM1_NODE)
+                if (packet.senderNode == BEDROOM1_NODE || packet.senderNode == LIVINGROOM_NODE)
                 {
-                    Serial.print("[COMMAND EXEC ACK] Device=");
+                    Serial.print("[COMMAND EXEC ACK] Node=");
+                    Serial.print(getNodeName(packet.senderNode));
+                    Serial.print(" Device=");
                     Serial.print(packet.deviceID);
                     Serial.print(" State=");
                     Serial.println(packet.state ? "ON" : "OFF");
+                    
+                    Serial.printf("[ACK RX] Device=%d State=%s\n", packet.deviceID, packet.state ? "ON" : "OFF");
 
-                    confirmDeviceCommand(packet.deviceID, packet.state);
+                    confirmDeviceCommand(packet.senderNode, packet.deviceID, packet.state);
                 }
                 break;
 
             case CMD_HEARTBEAT:
-                Serial.print("[HEARTBEAT] Node=");
-                Serial.print(getNodeName(packet.senderNode));
-                Serial.print(" Motion=");
-                Serial.print(packet.motionDetected);
-                Serial.print(" Bright=");
-                Serial.print(packet.brightness);
-                Serial.print(" Uptime=");
-                Serial.print(packet.uptime);
-                Serial.print("s Boot=");
-                Serial.println(packet.bootCount);
-
                 if (packet.senderNode == BEDROOM1_NODE)
                 {
+                    Serial.print("[HEARTBEAT] Node=BEDROOM1");
+                    Serial.print(" Motion=");
+                    Serial.print(packet.motionDetected);
+                    Serial.print(" Brightness=");
+                    Serial.print(packet.brightness);
+                    Serial.print(" Uptime=");
+                    Serial.print(packet.uptime);
+                    Serial.print("s Boot=");
+                    Serial.println(packet.bootCount);
+
                     if (
                         bedroom1.lastHeartbeat != 0 &&
                         (
@@ -272,14 +304,57 @@ void processIncomingPackets()
 
                     sendAck(BEDROOM1_NODE);
                 }
+                else if (packet.senderNode == LIVINGROOM_NODE)
+                {
+                    Serial.print("[HEARTBEAT] Node=LIVINGROOM");
+                    Serial.print(" Motion=");
+                    Serial.print(packet.motionDetected);
+                    Serial.print(" Temp=");
+                    Serial.print(packet.temperature, 1);
+                    Serial.print(" Humidity=");
+                    Serial.print(packet.humidity, 1);
+                    Serial.print(" Uptime=");
+                    Serial.print(packet.uptime);
+                    Serial.print("s Boot=");
+                    Serial.println(packet.bootCount);
+
+                    if (
+                        livingroom.lastHeartbeat != 0 &&
+                        (
+                            packet.bootCount != livingroom.lastBootCount ||
+                            packet.uptime < livingroom.lastNodeUptime
+                        )
+                    )
+                    {
+                        Serial.print("[NODE] ");
+                        Serial.print(getNodeName(packet.senderNode));
+                        Serial.println(" REBOOT DETECTED - forcing state sync");
+                        livingroom.syncPending = true;
+                    }
+
+                    if (!isnan(packet.temperature))
+                    {
+                        globalTemperature = packet.temperature;
+                    }
+                    if (!isnan(packet.humidity))
+                    {
+                        globalHumidity = packet.humidity;
+                    }
+                    livingroom.lastNodeUptime = packet.uptime;
+                    livingroom.lastBootCount  = packet.bootCount;
+
+                    updateHeartbeat(packet.senderNode);
+
+                    sendAck(LIVINGROOM_NODE);
+                }
                 break;
 
             case CMD_MOTION:
-                if (packet.senderNode == BEDROOM1_NODE)
+                if (packet.senderNode == BEDROOM1_NODE || packet.senderNode == LIVINGROOM_NODE)
                 {
                     if (packet.motionDetected)
                     {
-                        recordMotionEvent();
+                        recordMotionEvent(packet.senderNode);
                     }
                 }
                 break;
@@ -288,6 +363,17 @@ void processIncomingPackets()
                 if (packet.senderNode == BEDROOM1_NODE)
                 {
                     bedroom1.brightness = packet.brightness;
+                }
+                else if (packet.senderNode == LIVINGROOM_NODE)
+                {
+                    if (!isnan(packet.temperature))
+                    {
+                        globalTemperature = packet.temperature;
+                    }
+                    if (!isnan(packet.humidity))
+                    {
+                        globalHumidity = packet.humidity;
+                    }
                 }
                 break;
 

@@ -4,6 +4,7 @@
 
 void runAutomation();
 
-void recordMotionEvent();
+void recordMotionEvent(uint8_t nodeID);
 
-void confirmDeviceCommand(uint8_t deviceID, bool state);
+void confirmDeviceCommand(uint8_t nodeID, uint8_t deviceID, bool state);
+

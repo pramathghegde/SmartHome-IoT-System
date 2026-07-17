@@ -11,7 +11,6 @@
 #include "espnow_manager.h"
 #include "ota_manager.h"
 #include "environment_manager.h"
-#include "ldr_manager.h"
 #include "device_ids.h"
 
 RTC_DATA_ATTR int bootCount = 0;
@@ -86,7 +85,7 @@ static void printRuntimeDiagnostics()
 
     lastPrint = now;
 
-    Serial.println("[DIAG] BEDROOM1");
+    Serial.println("[DIAG] LIVINGROOM");
     Serial.print("[HEAP] Free=");
     Serial.print(ESP.getFreeHeap());
     Serial.print(" Min=");
@@ -129,7 +128,7 @@ void setup()
 
     initMotionSensor();
 
-    initLDR();
+    initEnvironment();
 
     // initOTA() connects WiFi and sets WiFi.mode(WIFI_STA).
     // This MUST happen before initEspNow().
@@ -140,7 +139,7 @@ void setup()
     // WiFi mode is already set by initOTA().
     initEspNow();
 
-    Serial.println("[BEDROOM1] Boot complete");
+    Serial.println("[LIVINGROOM] Boot complete");
 }
 
 void loop()
@@ -154,22 +153,20 @@ void loop()
         sendMotionStatus(true);
     }
 
-    updateLDR();            // read raw ADC
-
-    updateEnvironment();    // store brightness into environment struct
+    updateEnvironment();    // read temperature/humidity
 
     processIncomingPackets();
 
     // -------------------------------------------------------
     // MASTER WATCHDOG COMPLETELY REMOVED.
     //
-    // Bedroom1 must NEVER change relay state because master
+    // LivingRoom must NEVER change relay state because master
     // is absent, disconnected, or timed out.
     //
     // If master disappears:
-    //   - Bedroom1 keeps last received relay states
+    //   - LivingRoom keeps last received relay states
     //   - ESP-NOW stays alive
-    //   - Bedroom1 waits for master to return
+    //   - LivingRoom waits for master to return
     //   - When master returns, it re-syncs all device states
     //
     // Removing this was the primary fix for:

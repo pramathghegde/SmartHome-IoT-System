@@ -14,12 +14,18 @@
 #include "dashboard_manager.h"
 #include "device_cache.h"
 
+#include "mac_addresses.h"
+#include "packet.h"
+
 void setup()
 {
     Serial.begin(115200);
     delay(500);
 
     Serial.println("[MASTER] Booting...");
+    Serial.printf("[BOOT] LIVINGROOM_MAC Configured = %02X:%02X:%02X:%02X:%02X:%02X\n",
+                  LIVINGROOM_MAC[0], LIVINGROOM_MAC[1], LIVINGROOM_MAC[2], LIVINGROOM_MAC[3], LIVINGROOM_MAC[4], LIVINGROOM_MAC[5]);
+    Serial.printf("[BOOT] sizeof(Packet) = %d\n", sizeof(Packet));
 
     initDeviceCache();
     initOTA();
@@ -116,11 +122,20 @@ void loop()
         Serial.print(secs);
         Serial.println("s");
         Serial.print("B1      : ");
-        Serial.println(bedroom1.online ? "ONLINE" : "OFFLINE");
-        Serial.print("Motion  : ");
-        Serial.println(bedroom1.motionDetected ? "YES" : "NO");
-        Serial.print("Bright  : ");
+        Serial.print(bedroom1.online ? "ONLINE" : "OFFLINE");
+        Serial.print(" | Motion: ");
+        Serial.print(bedroom1.motionDetected ? "YES" : "NO");
+        Serial.print(" | Bright: ");
         Serial.println(bedroom1.brightness);
+        Serial.print("LR      : ");
+        Serial.print(livingroom.online ? "ONLINE" : "OFFLINE");
+        Serial.print(" | Motion: ");
+        Serial.print(livingroom.motionDetected ? "YES" : "NO");
+        Serial.print(" | Temp: ");
+        Serial.print(globalTemperature, 1);
+        Serial.print("C | Humid: ");
+        Serial.print(globalHumidity, 1);
+        Serial.println("%");
         Serial.print("Time    : ");
         Serial.print(getHour());
         Serial.print(":");
