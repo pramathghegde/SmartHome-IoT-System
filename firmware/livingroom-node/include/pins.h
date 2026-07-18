@@ -1,7 +1,13 @@
 #pragma once
 
 #define DHT_PIN            4
-#define MOTION_SENSOR_PIN   0
+#define PIR1_PIN           0
+#define PIR2_PIN           1
+
+// TODO(Stage 6):
+// Remove MOTION_SENSOR_PIN after all firmware references
+// have been migrated to PIR1_PIN/PIR2_PIN.
+#define MOTION_SENSOR_PIN  PIR1_PIN
 
 // Living Room Relay Pins (GPIOs)
 #define TUBE1_RELAY_PIN         5

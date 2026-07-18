@@ -3,23 +3,36 @@
 #include "motion_manager.h"
 #include "pins.h"
 
-// Raw GPIO state from Motion Sensor only.
-// No latch. No timeout. No motion duration decisions.
-// All decision logic belongs to master exclusively.
+//----------------------------------------------------------
+// LivingRoom supports multiple PIR sensors.
+//
+// Motion is considered ACTIVE if ANY PIR detects motion.
+//
+// The Master Controller receives only one aggregated
+// motionDetected state.
+//----------------------------------------------------------
+bool isLivingRoomMotionDetected()
+{
+    bool pir1Triggered = digitalRead(PIR1_PIN);
+    bool pir2Triggered = digitalRead(PIR2_PIN);
+
+    return pir1Triggered || pir2Triggered;
+}
 
 static bool rawMotionState      = false;
 static bool previousMotionState = false;
 
 void initMotionSensor()
 {
-    pinMode(MOTION_SENSOR_PIN, INPUT);
+    pinMode(PIR1_PIN, INPUT_PULLDOWN);
+    pinMode(PIR2_PIN, INPUT_PULLDOWN);
 
-    Serial.println("[MOTION] Sensor initialized");
+    Serial.println("[MOTION] Sensors initialized");
 }
 
 void updateMotionSensor()
 {
-    bool currentReading = digitalRead(MOTION_SENSOR_PIN);
+    bool currentReading = isLivingRoomMotionDetected();
 
     // Print only on GPIO state change to keep serial clean
     if (currentReading != rawMotionState)
