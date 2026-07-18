@@ -16,6 +16,8 @@
 #define VPIN_LR_MOTION_TIMEOUT      V16
 #define VPIN_LR_MOTION_TIMEOUT_NUM  16
 
+#define VPIN_DH_LDR_ENABLE      V26
+#define VPIN_DH_LDR_ENABLE_NUM  26
 #define VPIN_DH_MOTION_TIMEOUT      V27
 #define VPIN_DH_MOTION_TIMEOUT_NUM  27
 
@@ -28,4 +30,4 @@ void notifyDeviceStateChange(
     bool newState
 );
 void updateAllBlynkWidgets();
-void setDeviceMode(uint8_t nodeID, uint8_t deviceID, uint8_t newMode);
+void setDeviceMode(uint8_t nodeID, uint8_t deviceID, uint8_t newMode);

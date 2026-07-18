@@ -243,6 +243,7 @@ static BlynkTimerCache blynkDhExtra2Cache    = {0xFF, 0xFF, 0xFF, 0xFF, false, f
 
 static uint8_t blynkLdrEnableCache      = 0xFF;
 static uint8_t blynkLrLdrEnableCache    = 0xFF;
+static uint8_t blynkDhLdrEnableCache    = 0xFF;
 
 struct BlynkMotionTimeoutCache
 {
@@ -528,6 +529,7 @@ static void sendStatusToTerminal()
              dininghallConfig.motionTimeoutMinute,
              dininghallConfig.motionTimeoutSecond);
     appendLine(status, toBufDh);
+    appendLine(status, String("    LDR En  : ") + (dininghallLdrEnabled ? "YES" : "NO"));
 
     appendLine(status);
     appendLine(status, "--- APPLIANCES -----------");
@@ -837,6 +839,15 @@ void setDeviceMode(uint8_t nodeID, uint8_t deviceID, uint8_t newMode)
                 break;
             default:
                 return;
+        }
+    }
+
+    if (nodeID == DININGHALL_NODE && (deviceID == 5 || deviceID == 6))
+    {
+        // Extra Socket 1 / Extra Socket 2: manual only, never AUTO or SCHEDULE
+        if (newMode == MODE_AUTO || newMode == MODE_SCHEDULED)
+        {
+            newMode = MODE_OFF;
         }
     }
 
@@ -1244,6 +1255,15 @@ BLYNK_WRITE_PIN(VPIN_LR_MOTION_TIMEOUT)
     blynkLrMotionTimeoutCache.hasStart = true;
 }
 
+BLYNK_WRITE_PIN(VPIN_DH_LDR_ENABLE)
+{
+    dininghallLdrEnabled = (param.asInt() == 1);
+    Serial.print("[BLYNK] DH LDR ENABLE -> ");
+    Serial.println(dininghallLdrEnabled ? "ON" : "OFF");
+    saveRoomLdrEnabled(DININGHALL_NODE, dininghallLdrEnabled);
+    blynkDhLdrEnableCache = param.asInt();
+}
+
 BLYNK_WRITE_PIN(VPIN_DH_MOTION_TIMEOUT)
 {
     if (timerSyncInProgress) return;
@@ -1318,6 +1338,7 @@ void updateAllBlynkWidgets()
     // 2. LDR Enable Switch Widget
     writeLdrEnableIfChanged(VPIN_B1_LDR_ENABLE_NUM, bedroom1LdrEnabled, blynkLdrEnableCache);
     writeLdrEnableIfChanged(VPIN_LR_LDR_ENABLE_NUM, livingroomLdrEnabled, blynkLrLdrEnableCache);
+    writeLdrEnableIfChanged(VPIN_DH_LDR_ENABLE_NUM, dininghallLdrEnabled, blynkDhLdrEnableCache);
 
     // Global Temperature & Humidity Widgets
     Blynk.virtualWrite(VPIN_GLOBAL_TEMPERATURE, globalTemperature);

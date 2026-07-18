@@ -61,6 +61,7 @@ extern DeviceConfig dininghallFan;
 extern DeviceConfig dininghallSocket;
 extern DeviceConfig dininghallExtra1;
 extern DeviceConfig dininghallExtra2;
+extern bool dininghallLdrEnabled;
 
 
 

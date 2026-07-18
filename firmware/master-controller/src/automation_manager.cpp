@@ -239,16 +239,18 @@ static bool getAutoState(uint8_t nodeID, uint8_t deviceID)
             case 1: // LED Bulb
             case 2: // LED Tube Light
             case 4: // Socket
-                if (!bedroom1LdrEnabled)
+                if (!dininghallLdrEnabled)
                 {
                     return dininghall.motionDetected;
                 }
                 return (dininghall.motionDetected && dark);
 
-            case 3: // Fan
-            case 5: // Extra Socket 1
-            case 6: // Extra Socket 2
+            case 3: // Fan (never depends on darkness)
                 return dininghall.motionDetected;
+
+            case 5: // Extra Socket 1 - manual only, never AUTO
+            case 6: // Extra Socket 2 - manual only, never AUTO
+                return false;
 
             default:
                 return false;

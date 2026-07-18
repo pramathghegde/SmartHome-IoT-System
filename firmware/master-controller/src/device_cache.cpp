@@ -29,6 +29,7 @@ DeviceConfig dininghallSocket;
 DeviceConfig dininghallExtra1;
 DeviceConfig dininghallExtra2;
 RoomConfig dininghallConfig;
+bool dininghallLdrEnabled = true;
 
 
 
@@ -259,6 +260,10 @@ void saveRoomLdrEnabled(uint8_t nodeID, bool enabled)
     {
         putUCharIfChanged(prefs, "lr_ldr_en", enabled ? 1 : 0);
     }
+    else if (nodeID == DININGHALL_NODE)
+    {
+        putUCharIfChanged(prefs, "dh_ldr_en", enabled ? 1 : 0);
+    }
     prefs.end();
 }
 
@@ -398,6 +403,33 @@ void loadConfiguration()
     if (lrNeedsWrite)
     {
         putUCharIfChanged(prefs, "lr_ldr_en", 1);
+    }
+
+    // Load LDR Enable configuration (DiningHall)
+    bool dhLdrVal = true;
+    bool dhNeedsWrite = false;
+    if (prefs.isKey("dh_ldr_en"))
+    {
+        uint8_t val = prefs.getUChar("dh_ldr_en");
+        if (val == 0 || val == 1)
+        {
+            dhLdrVal = (val == 1);
+        }
+        else
+        {
+            dhLdrVal = true;
+            dhNeedsWrite = true;
+        }
+    }
+    else
+    {
+        dhLdrVal = true;
+        dhNeedsWrite = true;
+    }
+    dininghallLdrEnabled = dhLdrVal;
+    if (dhNeedsWrite)
+    {
+        putUCharIfChanged(prefs, "dh_ldr_en", 1);
     }
 
     // Load Motion Timeout configuration (Bedroom1)
@@ -560,6 +592,7 @@ void printRestoredConfiguration()
     Serial.printf("  Socket   : %s\n", getModeName(dininghallSocket.mode));
     Serial.printf("  Extra 1  : %s\n", getModeName(dininghallExtra1.mode));
     Serial.printf("  Extra 2  : %s\n", getModeName(dininghallExtra2.mode));
+    Serial.printf("  LDR Enable: %s\n", dininghallLdrEnabled ? "ON" : "OFF");
     Serial.printf("  Motion Timeout: %02u:%02u:%02u (%lu ms)\n",
                   dininghallConfig.motionTimeoutHour,
                   dininghallConfig.motionTimeoutMinute,
