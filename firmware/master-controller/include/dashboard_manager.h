@@ -16,6 +16,10 @@
 #define VPIN_LR_MOTION_TIMEOUT      V16
 #define VPIN_LR_MOTION_TIMEOUT_NUM  16
 
+#define VPIN_DH_MOTION_TIMEOUT      V27
+#define VPIN_DH_MOTION_TIMEOUT_NUM  27
+
+
 void initDashboard();
 void updateDashboard();
 void notifyDeviceStateChange(

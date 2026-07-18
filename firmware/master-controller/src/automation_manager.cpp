@@ -28,13 +28,14 @@ struct PendingCmd
     uint32_t lastSendAt;
 };
 
-// Index 0: BEDROOM1, Index 1: LIVINGROOM
-static PendingCmd pending[2][8] = {};
+// Index 0: BEDROOM1, Index 1: LIVINGROOM, Index 2: DININGHALL
+static PendingCmd pending[3][8] = {};
 
 static int getRoomIndex(uint8_t nodeID)
 {
     if (nodeID == BEDROOM1_NODE) return 0;
     if (nodeID == LIVINGROOM_NODE) return 1;
+    if (nodeID == DININGHALL_NODE) return 2;
     return -1;
 }
 
@@ -48,6 +49,7 @@ static int getRoomIndex(uint8_t nodeID)
 
 static unsigned long lastMotionTimeB1 = 0;
 static unsigned long lastMotionTimeLR = 0;
+static unsigned long lastMotionTimeDH = 0;
 
 void recordMotionEvent(uint8_t nodeID)
 {
@@ -67,6 +69,15 @@ void recordMotionEvent(uint8_t nodeID)
         {
             livingroom.motionDetected = true;
             Serial.println("[MOTION] LR Active");
+        }
+    }
+    else if (nodeID == DININGHALL_NODE)
+    {
+        lastMotionTimeDH = millis();
+        if (!dininghall.motionDetected)
+        {
+            dininghall.motionDetected = true;
+            Serial.println("[MOTION] DH Active");
         }
     }
 }
@@ -89,6 +100,15 @@ static void updateMotionTimeout()
     {
         livingroom.motionDetected = false;
         Serial.println("[MOTION] LR Timeout");
+    }
+
+    if (
+        dininghall.motionDetected &&
+        (millis() - lastMotionTimeDH) >= dininghallConfig.motionTimeoutMs
+    )
+    {
+        dininghall.motionDetected = false;
+        Serial.println("[MOTION] DH Timeout");
     }
 }
 
@@ -140,6 +160,10 @@ static bool isItDark(uint8_t nodeID)
     else if (nodeID == LIVINGROOM_NODE)
     {
         return livingroom.darkState;
+    }
+    else if (nodeID == DININGHALL_NODE)
+    {
+        return bedroom1.darkState;
     }
     return false;
 }
@@ -203,6 +227,28 @@ static bool getAutoState(uint8_t nodeID, uint8_t deviceID)
                     return true;
                 }
                 return dark;
+
+            default:
+                return false;
+        }
+    }
+    else if (nodeID == DININGHALL_NODE)
+    {
+        switch(deviceID)
+        {
+            case 1: // LED Bulb
+            case 2: // LED Tube Light
+            case 4: // Socket
+                if (!bedroom1LdrEnabled)
+                {
+                    return dininghall.motionDetected;
+                }
+                return (dininghall.motionDetected && dark);
+
+            case 3: // Fan
+            case 5: // Extra Socket 1
+            case 6: // Extra Socket 2
+                return dininghall.motionDetected;
 
             default:
                 return false;
@@ -384,6 +430,10 @@ void confirmDeviceCommand(uint8_t nodeID, uint8_t deviceID, bool state)
     {
         if (deviceID < 1 || deviceID > 8) return;
     }
+    else if (nodeID == DININGHALL_NODE)
+    {
+        if (deviceID < 1 || deviceID > 6) return;
+    }
 
     uint8_t idx = deviceID - 1;
 
@@ -424,6 +474,19 @@ void confirmDeviceCommand(uint8_t nodeID, uint8_t deviceID, bool state)
             case 6: device = &livingroomOutsideBulb;  break;
             case 7: device = &livingroomExtra1;       break;
             case 8: device = &livingroomExtra2;       break;
+            default: return;
+        }
+    }
+    else if (nodeID == DININGHALL_NODE)
+    {
+        switch(deviceID)
+        {
+            case 1: device = &dininghallBulb;   break;
+            case 2: device = &dininghallTube;   break;
+            case 3: device = &dininghallFan;    break;
+            case 4: device = &dininghallSocket; break;
+            case 5: device = &dininghallExtra1; break;
+            case 6: device = &dininghallExtra2; break;
             default: return;
         }
     }
@@ -509,5 +572,30 @@ void runAutomation()
         processDevice(LIVINGROOM_NODE, livingroomOutsideBulb, 6);
         processDevice(LIVINGROOM_NODE, livingroomExtra1,      7);
         processDevice(LIVINGROOM_NODE, livingroomExtra2,      8);
+    }
+
+    // DiningHall automation
+    if (dininghall.online)
+    {
+        if (dininghall.syncPending)
+        {
+            Serial.println("[SYNC] DH OFFLINE->ONLINE: syncing all devices");
+
+            forceDeviceSync(DININGHALL_NODE, dininghallBulb,   1);
+            forceDeviceSync(DININGHALL_NODE, dininghallTube,   2);
+            forceDeviceSync(DININGHALL_NODE, dininghallFan,    3);
+            forceDeviceSync(DININGHALL_NODE, dininghallSocket, 4);
+            forceDeviceSync(DININGHALL_NODE, dininghallExtra1, 5);
+            forceDeviceSync(DININGHALL_NODE, dininghallExtra2, 6);
+
+            dininghall.syncPending = false;
+        }
+
+        processDevice(DININGHALL_NODE, dininghallBulb,   1);
+        processDevice(DININGHALL_NODE, dininghallTube,   2);
+        processDevice(DININGHALL_NODE, dininghallFan,    3);
+        processDevice(DININGHALL_NODE, dininghallSocket, 4);
+        processDevice(DININGHALL_NODE, dininghallExtra1, 5);
+        processDevice(DININGHALL_NODE, dininghallExtra2, 6);
     }
 }

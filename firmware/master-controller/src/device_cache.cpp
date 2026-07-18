@@ -22,6 +22,15 @@ DeviceConfig livingroomExtra2;
 RoomConfig livingroomConfig;
 bool livingroomLdrEnabled = true;
 
+DeviceConfig dininghallBulb;
+DeviceConfig dininghallTube;
+DeviceConfig dininghallFan;
+DeviceConfig dininghallSocket;
+DeviceConfig dininghallExtra1;
+DeviceConfig dininghallExtra2;
+RoomConfig dininghallConfig;
+
+
 
 static void calculateMotionTimeoutMs(RoomConfig &config)
 {
@@ -219,7 +228,15 @@ void saveConfiguration()
     saveDeviceConfiguration(prefs, "lr_ob",   livingroomOutsideBulb);
     saveDeviceConfiguration(prefs, "lr_ex1",  livingroomExtra1);
     saveDeviceConfiguration(prefs, "lr_ex2",  livingroomExtra2);
+
+    saveDeviceConfiguration(prefs, "dh_bulb", dininghallBulb);
+    saveDeviceConfiguration(prefs, "dh_tube", dininghallTube);
+    saveDeviceConfiguration(prefs, "dh_fan",  dininghallFan);
+    saveDeviceConfiguration(prefs, "dh_sock", dininghallSocket);
+    saveDeviceConfiguration(prefs, "dh_ex1",  dininghallExtra1);
+    saveDeviceConfiguration(prefs, "dh_ex2",  dininghallExtra2);
     prefs.end();
+
 }
 
 void saveSingleDevice(const char* prefix, const DeviceConfig &device)
@@ -261,8 +278,15 @@ void saveRoomMotionTimeout(uint8_t nodeID, const RoomConfig &config)
         putUCharIfChanged(prefs, "lr_motion_m", config.motionTimeoutMinute);
         putUCharIfChanged(prefs, "lr_motion_s", config.motionTimeoutSecond);
     }
+    else if (nodeID == DININGHALL_NODE)
+    {
+        putUCharIfChanged(prefs, "dh_motion_h", config.motionTimeoutHour);
+        putUCharIfChanged(prefs, "dh_motion_m", config.motionTimeoutMinute);
+        putUCharIfChanged(prefs, "dh_motion_s", config.motionTimeoutSecond);
+    }
     prefs.end();
 }
+
 
 
 void loadConfiguration()
@@ -306,6 +330,21 @@ void loadConfiguration()
     if (!lr_obOk)   saveDeviceConfiguration(prefs, "lr_ob",   livingroomOutsideBulb);
     if (!lr_ex1Ok)  saveDeviceConfiguration(prefs, "lr_ex1",  livingroomExtra1);
     if (!lr_ex2Ok)  saveDeviceConfiguration(prefs, "lr_ex2",  livingroomExtra2);
+
+    bool dh_bulbOk = loadDeviceConfiguration(prefs, "dh_bulb", dininghallBulb,   defaultBulb);
+    bool dh_tubeOk = loadDeviceConfiguration(prefs, "dh_tube", dininghallTube,   defaultTube);
+    bool dh_fanOk  = loadDeviceConfiguration(prefs, "dh_fan",  dininghallFan,    defaultFan);
+    bool dh_sockOk = loadDeviceConfiguration(prefs, "dh_sock", dininghallSocket, defaultSocket);
+    bool dh_ex1Ok  = loadDeviceConfiguration(prefs, "dh_ex1",  dininghallExtra1, defaultSocket);
+    bool dh_ex2Ok  = loadDeviceConfiguration(prefs, "dh_ex2",  dininghallExtra2, defaultSocket);
+
+    if (!dh_bulbOk) saveDeviceConfiguration(prefs, "dh_bulb", dininghallBulb);
+    if (!dh_tubeOk) saveDeviceConfiguration(prefs, "dh_tube", dininghallTube);
+    if (!dh_fanOk)  saveDeviceConfiguration(prefs, "dh_fan",  dininghallFan);
+    if (!dh_sockOk) saveDeviceConfiguration(prefs, "dh_sock", dininghallSocket);
+    if (!dh_ex1Ok)  saveDeviceConfiguration(prefs, "dh_ex1",  dininghallExtra1);
+    if (!dh_ex2Ok)  saveDeviceConfiguration(prefs, "dh_ex2",  dininghallExtra2);
+
 
     // Load LDR Enable configuration (Bedroom1)
     bool ldrVal = true;
@@ -431,8 +470,45 @@ void loadConfiguration()
         putUCharIfChanged(prefs, "lr_motion_s", livingroomConfig.motionTimeoutSecond);
     }
 
+
+    // Load Motion Timeout configuration (DiningHall)
+    uint8_t dh_mh = 0, dh_mm = 5, dh_ms = 0; // Default 00:05:00
+    bool dh_motionTimeoutMissing = false;
+
+    if (prefs.isKey("dh_motion_h")) dh_mh = prefs.getUChar("dh_motion_h");
+    else { dh_mh = 0; dh_motionTimeoutMissing = true; }
+
+    if (prefs.isKey("dh_motion_m")) dh_mm = prefs.getUChar("dh_motion_m");
+    else { dh_mm = 5; dh_motionTimeoutMissing = true; }
+
+    if (prefs.isKey("dh_motion_s")) dh_ms = prefs.getUChar("dh_motion_s");
+    else { dh_ms = 0; dh_motionTimeoutMissing = true; }
+
+    dininghallConfig.motionTimeoutHour = dh_mh;
+    dininghallConfig.motionTimeoutMinute = dh_mm;
+    dininghallConfig.motionTimeoutSecond = dh_ms;
+
+    unsigned long dh_rawSec = (unsigned long)dh_mh * 3600UL + (unsigned long)dh_mm * 60UL + (unsigned long)dh_ms;
+    if (dh_rawSec < 5 || dh_rawSec > 43200 || dh_mh > 23 || dh_mm > 59 || dh_ms > 59)
+    {
+        clampRoomMotionTimeout(dininghallConfig);
+        dh_motionTimeoutMissing = true;
+    }
+    else
+    {
+        dininghallConfig.motionTimeoutMs = dh_rawSec * 1000UL;
+    }
+
+    if (dh_motionTimeoutMissing)
+    {
+        putUCharIfChanged(prefs, "dh_motion_h", dininghallConfig.motionTimeoutHour);
+        putUCharIfChanged(prefs, "dh_motion_m", dininghallConfig.motionTimeoutMinute);
+        putUCharIfChanged(prefs, "dh_motion_s", dininghallConfig.motionTimeoutSecond);
+    }
+
     prefs.end();
 }
+
 
 static const char* getModeName(uint8_t mode)
 {
@@ -477,6 +553,18 @@ void printRestoredConfiguration()
                   livingroomConfig.motionTimeoutMinute,
                   livingroomConfig.motionTimeoutSecond,
                   livingroomConfig.motionTimeoutMs);
+    Serial.println("DiningHall:");
+    Serial.printf("  Bulb     : %s\n", getModeName(dininghallBulb.mode));
+    Serial.printf("  Tube     : %s\n", getModeName(dininghallTube.mode));
+    Serial.printf("  Fan      : %s\n", getModeName(dininghallFan.mode));
+    Serial.printf("  Socket   : %s\n", getModeName(dininghallSocket.mode));
+    Serial.printf("  Extra 1  : %s\n", getModeName(dininghallExtra1.mode));
+    Serial.printf("  Extra 2  : %s\n", getModeName(dininghallExtra2.mode));
+    Serial.printf("  Motion Timeout: %02u:%02u:%02u (%lu ms)\n",
+                  dininghallConfig.motionTimeoutHour,
+                  dininghallConfig.motionTimeoutMinute,
+                  dininghallConfig.motionTimeoutSecond,
+                  dininghallConfig.motionTimeoutMs);
     Serial.println("Schedules (AUTO / SCHEDULE):");
 
     auto printDualSchedule = [](const char* name, const DeviceConfig &device) {
@@ -501,6 +589,13 @@ void printRestoredConfiguration()
     printDualSchedule("    Outside Bulb", livingroomOutsideBulb);
     printDualSchedule("    Extra 1", livingroomExtra1);
     printDualSchedule("    Extra 2", livingroomExtra2);
+    Serial.println("  [DiningHall]");
+    printDualSchedule("    Bulb", dininghallBulb);
+    printDualSchedule("    Tube", dininghallTube);
+    printDualSchedule("    Fan", dininghallFan);
+    printDualSchedule("    Socket", dininghallSocket);
+    printDualSchedule("    Extra 1", dininghallExtra1);
+    printDualSchedule("    Extra 2", dininghallExtra2);
     Serial.println("=================================");
 }
 

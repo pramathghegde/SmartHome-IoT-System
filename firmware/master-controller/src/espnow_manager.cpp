@@ -138,6 +138,17 @@ void initEspNow()
         Serial.println("[ESP-NOW] Failed to add peer LIVINGROOM");
     }
 
+    // Register DiningHall peer
+    memcpy(peerInfo.peer_addr, DININGHALL_MAC, 6);
+    if (esp_now_add_peer(&peerInfo) == ESP_OK)
+    {
+        Serial.println("[ESP-NOW] Peer DININGHALL added");
+    }
+    else
+    {
+        Serial.println("[ESP-NOW] Failed to add peer DININGHALL");
+    }
+
     Serial.println("[ESP-NOW] Ready");
 }
 
@@ -158,6 +169,10 @@ void sendAck(uint8_t targetNode)
     else if (targetNode == LIVINGROOM_NODE)
     {
         targetMac = LIVINGROOM_MAC;
+    }
+    else if (targetNode == DININGHALL_NODE)
+    {
+        targetMac = DININGHALL_MAC;
     }
 
     if (targetMac != nullptr)
@@ -196,6 +211,10 @@ bool sendDeviceCommand(
     {
         targetMac = LIVINGROOM_MAC;
     }
+    else if (targetNode == DININGHALL_NODE)
+    {
+        targetMac = DININGHALL_MAC;
+    }
 
     if (targetMac == nullptr)
     {
@@ -226,6 +245,7 @@ bool sendDeviceCommand(
     return result == ESP_OK;
 }
 
+
 void processIncomingPackets()
 {
     if (rxQueue == nullptr)
@@ -254,7 +274,7 @@ void processIncomingPackets()
         switch(packet.command)
         {
             case CMD_ACK:
-                if (packet.senderNode == BEDROOM1_NODE || packet.senderNode == LIVINGROOM_NODE)
+                if (packet.senderNode == BEDROOM1_NODE || packet.senderNode == LIVINGROOM_NODE || packet.senderNode == DININGHALL_NODE)
                 {
                     Serial.print("[COMMAND EXEC ACK] Node=");
                     Serial.print(getNodeName(packet.senderNode));
@@ -347,10 +367,43 @@ void processIncomingPackets()
 
                     sendAck(LIVINGROOM_NODE);
                 }
+                else if (packet.senderNode == DININGHALL_NODE)
+                {
+                    Serial.print("[HEARTBEAT] Node=DININGHALL");
+                    Serial.print(" Motion=");
+                    Serial.print(packet.motionDetected);
+                    Serial.print(" Brightness=");
+                    Serial.print(packet.brightness);
+                    Serial.print(" Uptime=");
+                    Serial.print(packet.uptime);
+                    Serial.print("s Boot=");
+                    Serial.println(packet.bootCount);
+
+                    if (
+                        dininghall.lastHeartbeat != 0 &&
+                        (
+                            packet.bootCount != dininghall.lastBootCount ||
+                            packet.uptime < dininghall.lastNodeUptime
+                        )
+                    )
+                    {
+                        Serial.print("[NODE] ");
+                        Serial.print(getNodeName(packet.senderNode));
+                        Serial.println(" REBOOT DETECTED - forcing state sync");
+                        dininghall.syncPending = true;
+                    }
+
+                    dininghall.lastNodeUptime = packet.uptime;
+                    dininghall.lastBootCount  = packet.bootCount;
+
+                    updateHeartbeat(packet.senderNode);
+
+                    sendAck(DININGHALL_NODE);
+                }
                 break;
 
             case CMD_MOTION:
-                if (packet.senderNode == BEDROOM1_NODE || packet.senderNode == LIVINGROOM_NODE)
+                if (packet.senderNode == BEDROOM1_NODE || packet.senderNode == LIVINGROOM_NODE || packet.senderNode == DININGHALL_NODE)
                 {
                     if (packet.motionDetected)
                     {

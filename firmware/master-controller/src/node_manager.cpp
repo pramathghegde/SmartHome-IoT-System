@@ -10,6 +10,7 @@
 
 static bool b1OfflinePrinted = false;
 static bool lrOfflinePrinted = false;
+static bool dhOfflinePrinted = false;
 
 const char* getNodeName(uint8_t nodeID)
 {
@@ -24,6 +25,7 @@ const char* getNodeName(uint8_t nodeID)
         case TANK_NODE:       return "TANK";
         case DOORLOCK_NODE:   return "DOORLOCK";
         case LIVINGROOM_NODE: return "LIVINGROOM";
+        case DININGHALL_NODE: return "DININGHALL";
         default:              return "UNKNOWN";
     }
 }
@@ -58,6 +60,20 @@ void updateHeartbeat(uint8_t nodeID)
         livingroom.lastHeartbeat = millis();
         lrOfflinePrinted = false;
     }
+    else if(nodeID == DININGHALL_NODE)
+    {
+        if(!dininghall.online)
+        {
+            Serial.print("[NODE] ");
+            Serial.print(getNodeName(nodeID));
+            Serial.println(" ONLINE");
+            dininghall.syncPending = true;
+        }
+
+        dininghall.online = true;
+        dininghall.lastHeartbeat = millis();
+        dhOfflinePrinted = false;
+    }
 }
 
 void checkNodeStatus()
@@ -91,4 +107,20 @@ void checkNodeStatus()
             lrOfflinePrinted = true;
         }
     }
-}
+
+    // DiningHall status check
+    if (millis() - dininghall.lastHeartbeat > HEARTBEAT_TIMEOUT)
+    {
+        dininghall.online = false;
+
+        if(!dhOfflinePrinted)
+        {
+            Serial.print("[NODE] ");
+            Serial.print(getNodeName(DININGHALL_NODE));
+            Serial.println(" OFFLINE");
+
+            dhOfflinePrinted = true;
+        }
+    }
+}
+

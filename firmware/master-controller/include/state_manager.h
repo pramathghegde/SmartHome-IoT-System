@@ -25,6 +25,8 @@ struct RoomState
 
 extern RoomState bedroom1;
 extern RoomState livingroom;
+extern RoomState dininghall;
+
 
 extern float globalTemperature;
 extern float globalHumidity;

@@ -26,13 +26,25 @@ struct DeviceConfig
     uint8_t schedStopMinute;
 };
 
+struct RoomConfig
+{
+    uint8_t motionTimeoutHour;
+    uint8_t motionTimeoutMinute;
+    uint8_t motionTimeoutSecond;
+    unsigned long motionTimeoutMs;
+};
+
 extern DeviceConfig bedroom1Fan;
 extern DeviceConfig bedroom1Tube;
 extern DeviceConfig bedroom1Bulb;
 extern DeviceConfig bedroom1Socket;
 extern DeviceConfig bedroom1AC;
 extern bool bedroom1LdrEnabled;
+
+extern RoomConfig bedroom1Config;
+extern RoomConfig livingroomConfig;
 extern bool livingroomLdrEnabled;
+extern RoomConfig dininghallConfig;
 
 extern DeviceConfig livingroomTube1;
 extern DeviceConfig livingroomTube2;
@@ -43,16 +55,13 @@ extern DeviceConfig livingroomOutsideBulb;
 extern DeviceConfig livingroomExtra1;
 extern DeviceConfig livingroomExtra2;
 
-struct RoomConfig
-{
-    uint8_t motionTimeoutHour;
-    uint8_t motionTimeoutMinute;
-    uint8_t motionTimeoutSecond;
-    unsigned long motionTimeoutMs;
-};
+extern DeviceConfig dininghallBulb;
+extern DeviceConfig dininghallTube;
+extern DeviceConfig dininghallFan;
+extern DeviceConfig dininghallSocket;
+extern DeviceConfig dininghallExtra1;
+extern DeviceConfig dininghallExtra2;
 
-extern RoomConfig bedroom1Config;
-extern RoomConfig livingroomConfig;
 
 
 void initDeviceCache();
