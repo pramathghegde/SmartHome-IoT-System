@@ -31,3 +31,6 @@ void notifyDeviceStateChange(
 );
 void updateAllBlynkWidgets();
 void setDeviceMode(uint8_t nodeID, uint8_t deviceID, uint8_t newMode);
+void blynkTerminalEvent(const String& msg);
+void getTerminalQueueDiagnostics(int &maxOccupancy, int &droppedCount);
+

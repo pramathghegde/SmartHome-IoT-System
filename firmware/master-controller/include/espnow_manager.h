@@ -17,3 +17,5 @@ bool getLastSendSuccess();
 void processIncomingPackets();
 
 void printEspNowDiagnostics();
+void getEspNowQueueStats(uint32_t &maxUsed, uint32_t &overflow);
+

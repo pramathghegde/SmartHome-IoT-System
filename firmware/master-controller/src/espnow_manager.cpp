@@ -455,3 +455,10 @@ void printEspNowDiagnostics()
     Serial.print(" lastSend=");
     Serial.println(lastSendSuccess ? "OK" : "FAIL_OR_NONE");
 }
+
+void getEspNowQueueStats(uint32_t &maxUsed, uint32_t &overflow)
+{
+    maxUsed = rxQueueMaxUsed;
+    overflow = rxQueueOverflow;
+}
+

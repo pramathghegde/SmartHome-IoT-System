@@ -121,26 +121,46 @@ void loop()
         Serial.print("m ");
         Serial.print(secs);
         Serial.println("s");
-        Serial.print("B1      : ");
-        Serial.print(bedroom1.online ? "ONLINE" : "OFFLINE");
-        Serial.print(" | Motion: ");
-        Serial.print(bedroom1.motionDetected ? "YES" : "NO");
-        Serial.print(" | Bright: ");
-        Serial.println(bedroom1.brightness);
-        Serial.print("LR      : ");
-        Serial.print(livingroom.online ? "ONLINE" : "OFFLINE");
-        Serial.print(" | Motion: ");
-        Serial.print(livingroom.motionDetected ? "YES" : "NO");
-        Serial.print(" | Temp: ");
-        Serial.print(globalTemperature, 1);
-        Serial.print("C | Humid: ");
-        Serial.print(globalHumidity, 1);
-        Serial.println("%");
         Serial.print("Time    : ");
         Serial.print(getHour());
         Serial.print(":");
         if (getMinute() < 10) Serial.print("0");
         Serial.println(getMinute());
+
+        Serial.printf("Bedroom1   : %s | Motion: %s | Devices: %s %s %s %s %s\n",
+            bedroom1.online ? "ONLINE" : "OFFLINE",
+            bedroom1.motionDetected ? "YES" : "NO",
+            bedroom1Fan.currentState ? "ON" : "OFF",
+            bedroom1Tube.currentState ? "ON" : "OFF",
+            bedroom1Bulb.currentState ? "ON" : "OFF",
+            bedroom1Socket.currentState ? "ON" : "OFF",
+            bedroom1AC.currentState ? "ON" : "OFF"
+        );
+
+        Serial.printf("LivingRoom : %s | Motion: %s | Devices: %s %s %s %s %s %s %s %s\n",
+            livingroom.online ? "ONLINE" : "OFFLINE",
+            livingroom.motionDetected ? "YES" : "NO",
+            livingroomTube1.currentState ? "ON" : "OFF",
+            livingroomTube2.currentState ? "ON" : "OFF",
+            livingroomFan.currentState ? "ON" : "OFF",
+            livingroomEBike.currentState ? "ON" : "OFF",
+            livingroomSocket.currentState ? "ON" : "OFF",
+            livingroomOutsideBulb.currentState ? "ON" : "OFF",
+            livingroomExtra1.currentState ? "ON" : "OFF",
+            livingroomExtra2.currentState ? "ON" : "OFF"
+        );
+
+        Serial.printf("DiningHall : %s | Motion: %s | Devices: %s %s %s %s %s %s\n",
+            dininghall.online ? "ONLINE" : "OFFLINE",
+            dininghall.motionDetected ? "YES" : "NO",
+            dininghallBulb.currentState ? "ON" : "OFF",
+            dininghallTube.currentState ? "ON" : "OFF",
+            dininghallFan.currentState ? "ON" : "OFF",
+            dininghallSocket.currentState ? "ON" : "OFF",
+            dininghallExtra1.currentState ? "ON" : "OFF",
+            dininghallExtra2.currentState ? "ON" : "OFF"
+        );
         Serial.println("=========================");
     }
 }
+

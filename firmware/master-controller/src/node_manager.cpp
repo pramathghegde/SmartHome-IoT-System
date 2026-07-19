@@ -8,6 +8,8 @@
 
 #include "node_ids.h"
 
+#include "dashboard_manager.h"
+
 static bool b1OfflinePrinted = false;
 static bool lrOfflinePrinted = false;
 static bool dhOfflinePrinted = false;
@@ -40,6 +42,7 @@ void updateHeartbeat(uint8_t nodeID)
             Serial.print(getNodeName(nodeID));
             Serial.println(" ONLINE");
             bedroom1.syncPending = true;
+            blynkTerminalEvent("Bedroom1 ONLINE");
         }
 
         bedroom1.online = true;
@@ -54,6 +57,7 @@ void updateHeartbeat(uint8_t nodeID)
             Serial.print(getNodeName(nodeID));
             Serial.println(" ONLINE");
             livingroom.syncPending = true;
+            blynkTerminalEvent("LivingRoom ONLINE");
         }
 
         livingroom.online = true;
@@ -68,6 +72,7 @@ void updateHeartbeat(uint8_t nodeID)
             Serial.print(getNodeName(nodeID));
             Serial.println(" ONLINE");
             dininghall.syncPending = true;
+            blynkTerminalEvent("DiningHall ONLINE");
         }
 
         dininghall.online = true;
@@ -88,7 +93,7 @@ void checkNodeStatus()
             Serial.print("[NODE] ");
             Serial.print(getNodeName(BEDROOM1_NODE));
             Serial.println(" OFFLINE");
-
+            blynkTerminalEvent("Bedroom1 OFFLINE");
             b1OfflinePrinted = true;
         }
     }
@@ -103,7 +108,7 @@ void checkNodeStatus()
             Serial.print("[NODE] ");
             Serial.print(getNodeName(LIVINGROOM_NODE));
             Serial.println(" OFFLINE");
-
+            blynkTerminalEvent("LivingRoom OFFLINE");
             lrOfflinePrinted = true;
         }
     }
@@ -118,7 +123,7 @@ void checkNodeStatus()
             Serial.print("[NODE] ");
             Serial.print(getNodeName(DININGHALL_NODE));
             Serial.println(" OFFLINE");
-
+            blynkTerminalEvent("DiningHall OFFLINE");
             dhOfflinePrinted = true;
         }
     }
