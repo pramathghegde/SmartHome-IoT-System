@@ -12,6 +12,7 @@ struct DeviceConfig
     uint8_t mode;
 
     bool currentState;
+    bool desiredState; // Added to track desired state internally, even when node is offline
 
     // AUTO Mode Schedule
     uint8_t autoStartHour;

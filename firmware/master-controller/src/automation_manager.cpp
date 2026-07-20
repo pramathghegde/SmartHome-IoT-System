@@ -266,6 +266,14 @@ static bool getAutoState(uint8_t nodeID, uint8_t deviceID)
 // currentState updates only on execution ACK, never on local send queueing.
 // ---------------------------------------------------------------
 
+static bool isNodeOnline(uint8_t nodeID)
+{
+    if (nodeID == BEDROOM1_NODE)   return bedroom1.online;
+    if (nodeID == LIVINGROOM_NODE) return livingroom.online;
+    if (nodeID == DININGHALL_NODE) return dininghall.online;
+    return false;
+}
+
 static void processDevice(
     uint8_t nodeID,
     DeviceConfig &device,
@@ -284,8 +292,37 @@ static void processDevice(
     {
         case MODE_OFF:       desiredState = false;                                                    break;
         case MODE_ON:        desiredState = true;                                                     break;
-        case MODE_AUTO:      desiredState = isAutoScheduleActive(device) ? getAutoState(nodeID, deviceID) : false; break;
+        case MODE_AUTO:
+        {
+            // STEP 8: expose the schedule gate — THIS IS THE MOST COMMON HIDDEN FAILURE
+            bool schedActive = isAutoScheduleActive(device);
+            bool autoState   = schedActive ? getAutoState(nodeID, deviceID) : false;
+            desiredState = autoState;
+            if (nodeID == DININGHALL_NODE)
+            {
+                static unsigned long lastDhAutoLog = 0;
+                if (millis() - lastDhAutoLog >= 5000)
+                {
+                    lastDhAutoLog = millis();
+                }
+            }
+            break;
+        }
         case MODE_SCHEDULED: desiredState = isSchedScheduleActive(device);                            break;
+    }
+
+    device.desiredState = desiredState; // Update desiredState runtime state
+
+    // If the node is offline, suppress all queueing, retries, and commands.
+    if (!isNodeOnline(nodeID))
+    {
+        // Cancel any active pending commands for this device if node went offline.
+        if (pending[roomIdx][idx].active)
+        {
+            pending[roomIdx][idx].active = false;
+            pending[roomIdx][idx].retries = 0;
+        }
+        return;
     }
 
     // No pending command: check if one is needed
@@ -384,39 +421,6 @@ static void processDevice(
         pending[roomIdx][idx].awaitingAck = false;
         return;
     }
-}
-
-// ---------------------------------------------------------------
-// forceDeviceSync() - called when node transitions OFFLINE->ONLINE
-// ---------------------------------------------------------------
-
-static void forceDeviceSync(
-    uint8_t nodeID,
-    DeviceConfig &device,
-    uint8_t deviceID
-)
-{
-    int roomIdx = getRoomIndex(nodeID);
-    if (roomIdx < 0) return;
-
-    uint8_t idx = deviceID - 1;
-
-    bool desiredState = false;
-
-    switch(device.mode)
-    {
-        case MODE_OFF:       desiredState = false;                                                    break;
-        case MODE_ON:        desiredState = true;                                                     break;
-        case MODE_AUTO:      desiredState = isAutoScheduleActive(device) ? getAutoState(nodeID, deviceID) : false; break;
-        case MODE_SCHEDULED: desiredState = isSchedScheduleActive(device);                            break;
-    }
-
-    pending[roomIdx][idx].active      = true;
-    pending[roomIdx][idx].targetState = desiredState;
-    pending[roomIdx][idx].retries     = 0;
-    pending[roomIdx][idx].awaitingAck = false;
-    pending[roomIdx][idx].createdAt   = millis();
-    pending[roomIdx][idx].lastSendAt  = 0;
 }
 
 void confirmDeviceCommand(uint8_t nodeID, uint8_t deviceID, bool state)
@@ -524,80 +528,72 @@ void runAutomation()
 
     updateMotionTimeout();
 
-    // Bedroom1 automation
-    if (bedroom1.online)
+    // Bedroom1 transition online check
+    if (bedroom1.syncPending)
     {
-        if (bedroom1.syncPending)
-        {
-            Serial.println("[SYNC] B1 OFFLINE->ONLINE: syncing all devices");
+        int mismatchCount = 0;
+        if (bedroom1Fan.desiredState    != bedroom1Fan.currentState)    mismatchCount++;
+        if (bedroom1Tube.desiredState   != bedroom1Tube.currentState)   mismatchCount++;
+        if (bedroom1Bulb.desiredState   != bedroom1Bulb.currentState)   mismatchCount++;
+        if (bedroom1Socket.desiredState != bedroom1Socket.currentState) mismatchCount++;
+        if (bedroom1AC.desiredState     != bedroom1AC.currentState)     mismatchCount++;
 
-            forceDeviceSync(BEDROOM1_NODE, bedroom1Fan,    FAN_DEVICE);
-            forceDeviceSync(BEDROOM1_NODE, bedroom1Tube,   TUBELIGHT_DEVICE);
-            forceDeviceSync(BEDROOM1_NODE, bedroom1Bulb,   BULB_DEVICE);
-            forceDeviceSync(BEDROOM1_NODE, bedroom1Socket, SOCKET_DEVICE);
-            forceDeviceSync(BEDROOM1_NODE, bedroom1AC,     AC_DEVICE);
-
-            bedroom1.syncPending = false;
-        }
-
-        processDevice(BEDROOM1_NODE, bedroom1Fan,    FAN_DEVICE);
-        processDevice(BEDROOM1_NODE, bedroom1Tube,   TUBELIGHT_DEVICE);
-        processDevice(BEDROOM1_NODE, bedroom1Bulb,   BULB_DEVICE);
-        processDevice(BEDROOM1_NODE, bedroom1Socket, SOCKET_DEVICE);
-        processDevice(BEDROOM1_NODE, bedroom1AC,     AC_DEVICE);
+        Serial.printf("[SYNC] Bedroom1 ONLINE - Synchronizing %d pending device states.\n", mismatchCount);
+        bedroom1.syncPending = false;
     }
 
-    // LivingRoom automation
-    if (livingroom.online)
+    // LivingRoom transition online check
+    if (livingroom.syncPending)
     {
-        if (livingroom.syncPending)
-        {
-            Serial.println("[SYNC] LR OFFLINE->ONLINE: syncing all devices");
+        int mismatchCount = 0;
+        if (livingroomTube1.desiredState       != livingroomTube1.currentState)       mismatchCount++;
+        if (livingroomTube2.desiredState       != livingroomTube2.currentState)       mismatchCount++;
+        if (livingroomFan.desiredState         != livingroomFan.currentState)         mismatchCount++;
+        if (livingroomEBike.desiredState       != livingroomEBike.currentState)       mismatchCount++;
+        if (livingroomSocket.desiredState      != livingroomSocket.currentState)      mismatchCount++;
+        if (livingroomOutsideBulb.desiredState != livingroomOutsideBulb.currentState) mismatchCount++;
+        if (livingroomExtra1.desiredState      != livingroomExtra1.currentState)      mismatchCount++;
+        if (livingroomExtra2.desiredState      != livingroomExtra2.currentState)      mismatchCount++;
 
-            forceDeviceSync(LIVINGROOM_NODE, livingroomTube1,       1);
-            forceDeviceSync(LIVINGROOM_NODE, livingroomTube2,       2);
-            forceDeviceSync(LIVINGROOM_NODE, livingroomFan,         3);
-            forceDeviceSync(LIVINGROOM_NODE, livingroomEBike,       4);
-            forceDeviceSync(LIVINGROOM_NODE, livingroomSocket,      5);
-            forceDeviceSync(LIVINGROOM_NODE, livingroomOutsideBulb, 6);
-            forceDeviceSync(LIVINGROOM_NODE, livingroomExtra1,      7);
-            forceDeviceSync(LIVINGROOM_NODE, livingroomExtra2,      8);
-
-            livingroom.syncPending = false;
-        }
-
-        processDevice(LIVINGROOM_NODE, livingroomTube1,       1);
-        processDevice(LIVINGROOM_NODE, livingroomTube2,       2);
-        processDevice(LIVINGROOM_NODE, livingroomFan,         3);
-        processDevice(LIVINGROOM_NODE, livingroomEBike,       4);
-        processDevice(LIVINGROOM_NODE, livingroomSocket,      5);
-        processDevice(LIVINGROOM_NODE, livingroomOutsideBulb, 6);
-        processDevice(LIVINGROOM_NODE, livingroomExtra1,      7);
-        processDevice(LIVINGROOM_NODE, livingroomExtra2,      8);
+        Serial.printf("[SYNC] LivingRoom ONLINE - Synchronizing %d pending device states.\n", mismatchCount);
+        livingroom.syncPending = false;
     }
 
-    // DiningHall automation
-    if (dininghall.online)
+    // DiningHall transition online check
+    if (dininghall.syncPending)
     {
-        if (dininghall.syncPending)
-        {
-            Serial.println("[SYNC] DH OFFLINE->ONLINE: syncing all devices");
+        int mismatchCount = 0;
+        if (dininghallBulb.desiredState   != dininghallBulb.currentState)   mismatchCount++;
+        if (dininghallTube.desiredState   != dininghallTube.currentState)   mismatchCount++;
+        if (dininghallFan.desiredState    != dininghallFan.currentState)    mismatchCount++;
+        if (dininghallSocket.desiredState != dininghallSocket.currentState) mismatchCount++;
+        if (dininghallExtra1.desiredState != dininghallExtra1.currentState) mismatchCount++;
+        if (dininghallExtra2.desiredState != dininghallExtra2.currentState) mismatchCount++;
 
-            forceDeviceSync(DININGHALL_NODE, dininghallBulb,   1);
-            forceDeviceSync(DININGHALL_NODE, dininghallTube,   2);
-            forceDeviceSync(DININGHALL_NODE, dininghallFan,    3);
-            forceDeviceSync(DININGHALL_NODE, dininghallSocket, 4);
-            forceDeviceSync(DININGHALL_NODE, dininghallExtra1, 5);
-            forceDeviceSync(DININGHALL_NODE, dininghallExtra2, 6);
-
-            dininghall.syncPending = false;
-        }
-
-        processDevice(DININGHALL_NODE, dininghallBulb,   1);
-        processDevice(DININGHALL_NODE, dininghallTube,   2);
-        processDevice(DININGHALL_NODE, dininghallFan,    3);
-        processDevice(DININGHALL_NODE, dininghallSocket, 4);
-        processDevice(DININGHALL_NODE, dininghallExtra1, 5);
-        processDevice(DININGHALL_NODE, dininghallExtra2, 6);
+        Serial.printf("[SYNC] DiningHall ONLINE - Synchronizing %d pending device states.\n", mismatchCount);
+        dininghall.syncPending = false;
     }
+
+    // Unconditional device processing (updates desiredState internally, suppresses queueing/retries/sending if offline)
+    processDevice(BEDROOM1_NODE, bedroom1Fan,    FAN_DEVICE);
+    processDevice(BEDROOM1_NODE, bedroom1Tube,   TUBELIGHT_DEVICE);
+    processDevice(BEDROOM1_NODE, bedroom1Bulb,   BULB_DEVICE);
+    processDevice(BEDROOM1_NODE, bedroom1Socket, SOCKET_DEVICE);
+    processDevice(BEDROOM1_NODE, bedroom1AC,     AC_DEVICE);
+
+    processDevice(LIVINGROOM_NODE, livingroomTube1,       1);
+    processDevice(LIVINGROOM_NODE, livingroomTube2,       2);
+    processDevice(LIVINGROOM_NODE, livingroomFan,         3);
+    processDevice(LIVINGROOM_NODE, livingroomEBike,       4);
+    processDevice(LIVINGROOM_NODE, livingroomSocket,      5);
+    processDevice(LIVINGROOM_NODE, livingroomOutsideBulb, 6);
+    processDevice(LIVINGROOM_NODE, livingroomExtra1,      7);
+    processDevice(LIVINGROOM_NODE, livingroomExtra2,      8);
+
+    processDevice(DININGHALL_NODE, dininghallBulb,   1);
+    processDevice(DININGHALL_NODE, dininghallTube,   2);
+    processDevice(DININGHALL_NODE, dininghallFan,    3);
+    processDevice(DININGHALL_NODE, dininghallSocket, 4);
+    processDevice(DININGHALL_NODE, dininghallExtra1, 5);
+    processDevice(DININGHALL_NODE, dininghallExtra2, 6);
 }

@@ -10,16 +10,25 @@
 static bool rawMotionState      = false;
 static bool previousMotionState = false;
 
+static bool isDiningHallMotionDetected()
+{
+    bool pir1Triggered = digitalRead(PIR1_PIN);
+    bool pir2Triggered = digitalRead(PIR2_PIN);
+
+    return pir1Triggered || pir2Triggered;
+}
+
 void initMotionSensor()
 {
-    pinMode(MOTION_SENSOR_PIN, INPUT_PULLDOWN);
+    pinMode(PIR1_PIN, INPUT_PULLDOWN);
+    pinMode(PIR2_PIN, INPUT_PULLDOWN);
 
-    Serial.println("[MOTION] Sensor initialized");
+    Serial.println("[MOTION] Sensors initialized");
 }
 
 void updateMotionSensor()
 {
-    bool currentReading = digitalRead(MOTION_SENSOR_PIN);
+    bool currentReading = isDiningHallMotionDetected();
 
     // Print only on GPIO state change to keep serial clean
     if (currentReading != rawMotionState)

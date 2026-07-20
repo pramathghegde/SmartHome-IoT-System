@@ -1,6 +1,7 @@
 #pragma once
-
-#define MOTION_SENSOR_PIN   0
+#define PIR1_PIN            0
+#define PIR2_PIN            1
+#define MOTION_SENSOR_PIN   PIR1_PIN
 
 // Dining Hall Relay Pins (GPIOs)
 #define BULB_RELAY_PIN     5

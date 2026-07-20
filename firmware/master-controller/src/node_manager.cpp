@@ -93,6 +93,7 @@ void checkNodeStatus()
             Serial.print("[NODE] ");
             Serial.print(getNodeName(BEDROOM1_NODE));
             Serial.println(" OFFLINE");
+            Serial.printf("[AUTOMATION] %s OFFLINE - Desired state updated, synchronization deferred.\n", getNodeName(BEDROOM1_NODE));
             blynkTerminalEvent("Bedroom1 OFFLINE");
             b1OfflinePrinted = true;
         }
@@ -108,6 +109,7 @@ void checkNodeStatus()
             Serial.print("[NODE] ");
             Serial.print(getNodeName(LIVINGROOM_NODE));
             Serial.println(" OFFLINE");
+            Serial.printf("[AUTOMATION] %s OFFLINE - Desired state updated, synchronization deferred.\n", getNodeName(LIVINGROOM_NODE));
             blynkTerminalEvent("LivingRoom OFFLINE");
             lrOfflinePrinted = true;
         }
@@ -123,6 +125,7 @@ void checkNodeStatus()
             Serial.print("[NODE] ");
             Serial.print(getNodeName(DININGHALL_NODE));
             Serial.println(" OFFLINE");
+            Serial.printf("[AUTOMATION] %s OFFLINE - Desired state updated, synchronization deferred.\n", getNodeName(DININGHALL_NODE));
             blynkTerminalEvent("DiningHall OFFLINE");
             dhOfflinePrinted = true;
         }
