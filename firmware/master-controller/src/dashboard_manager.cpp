@@ -451,152 +451,155 @@ void notifyDeviceStateChange(
 
 
 // ---------------------------------------------------------------
-// sendStatusToTerminal()
-// Rate-limited: called every 60s from updateDashboard()
-// Sends compact multi-line status to V200 terminal.
-// Each virtualWrite is a separate ~40-byte line to stay within
-// Blynk Free plan message limits (100 bytes/msg, 200ms throttle).
+// Asynchronous Event Queue (V200)
+// Lightweight 8-element FIFO queue drained 1 event every 200ms
 // ---------------------------------------------------------------
 
-static String termQueue[64];
-static int termQueueHead = 0;
-static int termQueueTail = 0;
-static int termQueueMaxOccupancy = 0;
-static int termQueueDroppedCount = 0;
+static String eventQueue[8];
+static int eventQueueHead = 0;
+static int eventQueueTail = 0;
+static int eventQueueMaxOccupancy = 0;
+static int eventQueueDroppedCount = 0;
 
-static int getTermQueueOccupancy()
+static int getEventQueueOccupancy()
 {
-    int count = termQueueHead - termQueueTail;
-    if (count < 0) count += 64;
+    int count = eventQueueHead - eventQueueTail;
+    if (count < 0) count += 8;
     return count;
 }
 
-static void queueTermLine(const String& line)
+static void queueEventLine(const String& line)
 {
-    int nextHead = (termQueueHead + 1) % 64;
-    if (nextHead != termQueueTail)
+    int nextHead = (eventQueueHead + 1) % 8;
+    if (nextHead != eventQueueTail)
     {
-        termQueue[termQueueHead] = line + "\n";
-        termQueueHead = nextHead;
+        eventQueue[eventQueueHead] = line;
+        eventQueueHead = nextHead;
 
-        int currentOccupancy = getTermQueueOccupancy();
-        if (currentOccupancy > termQueueMaxOccupancy)
+        int currentOccupancy = getEventQueueOccupancy();
+        if (currentOccupancy > eventQueueMaxOccupancy)
         {
-            termQueueMaxOccupancy = currentOccupancy;
+            eventQueueMaxOccupancy = currentOccupancy;
         }
     }
     else
     {
-        termQueueDroppedCount++;
-        Serial.println("[BLYNK] Terminal queue full, dropping line!");
+        eventQueueDroppedCount++;
+        Serial.println("[BLYNK] Event queue full, dropping event!");
     }
 }
 
-static void clearTermQueue()
+static void clearEventQueue()
 {
-    termQueueHead = 0;
-    termQueueTail = 0;
+    eventQueueHead = 0;
+    eventQueueTail = 0;
 }
 
 void getTerminalQueueDiagnostics(int &maxOccupancy, int &droppedCount)
 {
-    maxOccupancy = termQueueMaxOccupancy;
-    droppedCount = termQueueDroppedCount;
+    maxOccupancy = eventQueueMaxOccupancy;
+    droppedCount = eventQueueDroppedCount;
 }
 
-
-// Internal: send a single short line to the Blynk terminal (V200) by queueing it
-static void termLine(const String& line)
-{
-    queueTermLine(line);
-}
-
-// Public: send an important one-off event bypassing the 60s timer
+// Public: send an important one-off event via async FIFO queue (V200)
 void blynkTerminalEvent(const String& msg)
 {
-    queueTermLine("[EVT] " + msg);
-    Serial.print("[BLYNK] Terminal event: ");
+    queueEventLine("[EVT] " + msg);
+    Serial.print("[BLYNK] Terminal event queued: ");
     Serial.println(msg);
 }
+
+// ---------------------------------------------------------------
+// sendStatusToTerminal()
+// Rate-limited: called every 60s from updateDashboard()
+// Sends complete multi-line status report to V200 terminal in
+// EXACTLY ONE Blynk.virtualWrite(200, report) call.
+// ---------------------------------------------------------------
 
 static void sendStatusToTerminal()
 {
     if (!Blynk.connected())
     {
-        Serial.println("[BLYNK] Terminal skipped: not connected");
+        Serial.println("[BLYNK] Terminal report skipped: not connected");
         return;
     }
 
-    // Get time string
-    char timeStr[9] = "--:--:--";
-    if (isTimeValid())
-    {
-        struct tm timeinfo;
-        if (getLocalTime(&timeinfo))
-        {
-            strftime(timeStr, sizeof(timeStr), "%H:%M:%S", &timeinfo);
-        }
+    String report = "";
+    report.reserve(512);
+
+    report += "------------------------------------------------\n";
+    report += "SYSTEM STATUS\n\n";
+
+    report += "WiFi      : ";
+    report += (WiFi.status() == WL_CONNECTED ? "Connected\n" : "Disconnected\n");
+
+    report += "RSSI      : ";
+    report += String(WiFi.RSSI());
+    report += " dBm\n";
+
+    report += "ESP-NOW   : OK\n\n";
+
+    report += "Temp      : ";
+    if (isnan(globalTemperature)) {
+        report += "--.- °C\n";
+    } else {
+        report += String(globalTemperature, 1);
+        report += " °C\n";
     }
 
-    // Helper lambda for device states formatting
-    auto devStates = [](const DeviceConfig& fan, const DeviceConfig& tube, const DeviceConfig& bulb, const DeviceConfig& socket, const DeviceConfig& ac) -> String
-    {
-        String s = "Fan:";
-        s += (fan.currentState ? "ON" : "OFF");
-        s += " Tube:";
-        s += (tube.currentState ? "ON" : "OFF");
-        s += " Bulb:";
-        s += (bulb.currentState ? "ON" : "OFF");
-        s += " Socket:";
-        s += (socket.currentState ? "ON" : "OFF");
-        s += " AC:";
-        s += (ac.currentState ? "ON" : "OFF");
-        return s;
-    };
+    report += "Humidity  : ";
+    if (isnan(globalHumidity)) {
+        report += "-- %\n";
+    } else {
+        report += String(globalHumidity, 0);
+        report += " %\n";
+    }
 
-    termLine("========================================");
-    termLine("           ADVAITA SMART HOME           ");
-    termLine("========================================");
-    termLine(String("WiFi  : Connected | RSSI: ") + WiFi.RSSI() + " dBm");
-    termLine("ESP-NOW: Healthy");
-    termLine(String("Time  : ") + timeStr);
-    termLine(String("Temp  : ") + String(globalTemperature, 1) + " C | Humid: " + String(globalHumidity, 1) + " %");
-    termLine(String("Global Brightness: ") + bedroom1.brightness + " [LDR]");
-    termLine(String("Day / Night: ") + (bedroom1.darkState ? "NIGHT" : "DAY"));
+    report += "Brightness: ";
+    report += String(bedroom1.brightness);
+    report += "\n";
 
-    termLine("----------------------------------------");
-    termLine("Bedroom1");
-    termLine(String("  ") + (bedroom1.online ? "ONLINE" : "OFFLINE") +
-             " | Motion: " + (bedroom1.motionDetected ? "YES" : "NO"));
-    termLine("  Devices: " + devStates(bedroom1Fan, bedroom1Tube, bedroom1Bulb, bedroom1Socket, bedroom1AC));
+    report += "Mode      : ";
+    report += (bedroom1.darkState ? "NIGHT\n\n" : "DAY\n\n");
 
-    termLine("----------------------------------------");
-    termLine("LivingRoom");
-    termLine(String("  ") + (livingroom.online ? "ONLINE" : "OFFLINE") +
-             " | Motion: " + (livingroom.motionDetected ? "YES" : "NO"));
-    termLine("  Devices: Tube1:" + String(livingroomTube1.currentState ? "ON" : "OFF") +
-             " Tube2:" + String(livingroomTube2.currentState ? "ON" : "OFF") +
-             " Fan:" + String(livingroomFan.currentState ? "ON" : "OFF") +
-             " EBike:" + String(livingroomEBike.currentState ? "ON" : "OFF") +
-             " Socket:" + String(livingroomSocket.currentState ? "ON" : "OFF") +
-             " Bulb:" + String(livingroomOutsideBulb.currentState ? "ON" : "OFF") +
-             " Ex1:" + String(livingroomExtra1.currentState ? "ON" : "OFF") +
-             " Ex2:" + String(livingroomExtra2.currentState ? "ON" : "OFF"));
+    report += "Bedroom1\n";
+    report += "Motion : ";
+    report += (bedroom1.motionDetected ? "YES\n" : "NO\n");
+    report += "Bulb   : ";
+    report += (bedroom1Bulb.currentState ? "ON\n" : "OFF\n");
+    report += "Fan    : ";
+    report += (bedroom1Fan.currentState ? "ON\n" : "OFF\n");
+    report += "Socket : ";
+    report += (bedroom1Socket.currentState ? "ON\n\n" : "OFF\n\n");
 
-    termLine("----------------------------------------");
-    termLine("DiningHall");
-    termLine(String("  ") + (dininghall.online ? "ONLINE" : "OFFLINE") +
-             " | Motion: " + (dininghall.motionDetected ? "YES" : "NO"));
-    termLine("  Devices: Bulb:" + String(dininghallBulb.currentState ? "ON" : "OFF") +
-             " Tube:" + String(dininghallTube.currentState ? "ON" : "OFF") +
-             " Fan:" + String(dininghallFan.currentState ? "ON" : "OFF") +
-             " Socket:" + String(dininghallSocket.currentState ? "ON" : "OFF") +
-             " Ex1:" + String(dininghallExtra1.currentState ? "ON" : "OFF") +
-             " Ex2:" + String(dininghallExtra2.currentState ? "ON" : "OFF"));
+    report += "LivingRoom\n";
+    report += "Motion : ";
+    report += (livingroom.motionDetected ? "YES\n" : "NO\n");
+    report += "Bulb   : ";
+    report += (livingroomOutsideBulb.currentState ? "ON\n" : "OFF\n");
+    report += "Fan    : ";
+    report += (livingroomFan.currentState ? "ON\n\n" : "OFF\n\n");
 
-    termLine("========================================");
+    report += "DiningHall\n";
+    report += "Motion : ";
+    report += (dininghall.motionDetected ? "YES\n" : "NO\n");
+    report += "Bulb   : ";
+    report += (dininghallBulb.currentState ? "ON\n" : "OFF\n");
+    report += "Fan    : ";
+    report += (dininghallFan.currentState ? "ON\n" : "OFF\n");
+    report += "Socket : ";
+    report += (dininghallSocket.currentState ? "ON\n" : "OFF\n");
+    report += "Extra1 : ";
+    report += (dininghallExtra1.currentState ? "ON\n" : "OFF\n");
+    report += "Extra2 : ";
+    report += (dininghallExtra2.currentState ? "ON\n\n" : "OFF\n\n");
 
-    Serial.println("[BLYNK] Terminal status queued (non-blocking)");
+    report += "------------------------------------------------";
+
+    Blynk.virtualWrite(200, report);
+    countBlynkMessage(true, false);
+
+    Serial.println("[BLYNK] Sent 60s Terminal Status Report (V200) as 1 single virtualWrite");
 }
 
 
@@ -1350,10 +1353,6 @@ void updateAllBlynkWidgets()
     writeLdrEnableIfChanged(VPIN_LR_LDR_ENABLE_NUM, livingroomLdrEnabled, blynkLrLdrEnableCache);
     writeLdrEnableIfChanged(VPIN_DH_LDR_ENABLE_NUM, dininghallLdrEnabled, blynkDhLdrEnableCache);
 
-    // Global Temperature & Humidity Widgets
-    Blynk.virtualWrite(VPIN_GLOBAL_TEMPERATURE, globalTemperature);
-    Blynk.virtualWrite(VPIN_GLOBAL_HUMIDITY, globalHumidity);
-
     // 2b. Motion Timeout Duration Widget
     writeMotionTimeoutIfChanged(VPIN_B1_MOTION_TIMEOUT_NUM, bedroom1Config.motionTimeoutHour, bedroom1Config.motionTimeoutMinute, bedroom1Config.motionTimeoutSecond, blynkMotionTimeoutCache);
     writeMotionTimeoutIfChanged(VPIN_LR_MOTION_TIMEOUT_NUM, livingroomConfig.motionTimeoutHour, livingroomConfig.motionTimeoutMinute, livingroomConfig.motionTimeoutSecond, blynkLrMotionTimeoutCache);
@@ -1468,33 +1467,19 @@ void updateDashboard()
 
     if (Blynk.connected())
     {
-        static float prevTemp = -999.0f;
-        static float prevHum = -999.0f;
-
-        if (globalTemperature != prevTemp && !isnan(globalTemperature))
+        // Drain asynchronous event queue (at most 1 event every 200ms to respect Blynk rate limits)
+        static unsigned long lastEventSend = 0;
+        if (eventQueueTail != eventQueueHead && millis() - lastEventSend >= 200)
         {
-            prevTemp = globalTemperature;
-            Blynk.virtualWrite(VPIN_GLOBAL_TEMPERATURE, prevTemp);
-        }
-        if (globalHumidity != prevHum && !isnan(globalHumidity))
-        {
-            prevHum = globalHumidity;
-            Blynk.virtualWrite(VPIN_GLOBAL_HUMIDITY, prevHum);
-        }
-
-        // Process terminal queue (at most 1 line every 250ms to respect Blynk rate limits and prevent blocking)
-        static unsigned long lastTermSend = 0;
-        if (termQueueTail != termQueueHead && millis() - lastTermSend >= 250)
-        {
-            Blynk.virtualWrite(200, termQueue[termQueueTail]);
+            Blynk.virtualWrite(200, eventQueue[eventQueueTail]);
             countBlynkMessage(true, false);
-            termQueueTail = (termQueueTail + 1) % 64;
-            lastTermSend = millis();
+            eventQueueTail = (eventQueueTail + 1) % 8;
+            lastEventSend = millis();
         }
     }
     else
     {
-        clearTermQueue();
+        clearEventQueue();
     }
 
     static unsigned long lastSend = 0;
